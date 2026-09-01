@@ -4,11 +4,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Foundation done. Editor chrome components built; ready to wire them into a real editor route and stand up the real-time canvas.
+- Foundation done. Editor chrome built. Authentication wired. Ready to stand up the real-time canvas surface.
 
 ## Current Goal
 
-- Stand up the real-time canvas surface (spec 03): Liveblocks room, React Flow integration, the eight node color pairs and six shapes from `ui-context.md`, and the right slide-over AI sidebar shell.
+- Stand up the real-time canvas surface (spec 04): Liveblocks room, React Flow integration, the eight node color pairs and six shapes from `ui-context.md`, and the right slide-over AI sidebar shell.
 
 ## Completed
 
@@ -28,6 +28,18 @@ Update this file whenever the current phase, active feature, or implementation s
   - `app/editor/page.tsx` — client-component route. Owns `useState<boolean>` (default `true`) for sidebar open/close, renders `<EditorNavbar />` + floating `<ProjectSidebar />` + a centered `<main>` canvas placeholder (`text-copy-muted` "Canvas" label). Wrapped by the root `app/layout.tsx`; no `app/editor/layout.tsx` for now.
   - No new dependencies, no `globals.css` changes, no modifications to `components/ui/*`.
   - Verified: `bunx tsc --noEmit` exits 0, `bun run lint` (oxlint) exits 0, `bunx oxfmt --check components/editor/ app/editor/` clean. Smoke-tested: dev server boots, `GET /editor` returns 200 (~20KB, ~175ms warm), rendered HTML contains `Projects`, `My Projects`, `Shared`, `New Project`, and `Canvas` markers; root `/` still 200, no regression.
+- **Spec 03 — Clerk authentication** (commit pending)
+  - `@clerk/ui@1.31.0` installed as a runtime dep (the theme package; `@clerk/nextjs@^7.8.3` was already on the working tree).
+  - `proxy.ts` at project root — Next 16's renamed Middleware. `clerkMiddleware` from `@clerk/nextjs/server` with a public-route matcher for `/sign-in(.*)` and `/sign-up(.*)`; every other route calls `auth.protect()`. The public-route patterns mirror the `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` env vars so a single source of truth drives both. Matcher excludes `_next/static`, `_next/image`, `favicon.ico`, and image extensions; runs on `(api|trpc)(.*)`.
+  - `app/sign-in/[[...sign-in]]/page.tsx`, `app/sign-up/[[...sign-up]]/page.tsx` — server components. Catch-all routing so Clerk's multi-step subroutes (`/sign-in/factor-one`, `/sign-in/verify-email-address`, etc.) work. Each page renders `<AuthShell><SignIn|SignUp appearance={authAppearance} routing="path" ... /></AuthShell>`.
+  - `components/auth/auth-shell.tsx` + `index.ts` — `"use client"` presentational two-panel shell: left aside (logo + tagline + 3-item feature list, `hidden` below `lg`) + right main (centered `max-w-sm` form slot). No business logic. No modifications to `components/ui/*`.
+  - `lib/auth-appearance.ts` — single source of truth for Clerk appearance. Uses the `shadcn` theme from `@clerk/ui/themes` (per Clerk skill mandate for shadcn projects) and a `variables` map that aliases every Clerk CSS variable to the project's existing `var(--...)` tokens (`colorPrimary` → `var(--accent-primary)`, etc.). No hardcoded hex anywhere in auth files. The matching `@import "@clerk/ui/themes/shadcn.css"` line in `app/globals.css` (alongside the existing Tailwind imports) is what actually emits the shadcn-token-mapped classes into the bundle — without it, Clerk's profile / "Manage account" pages fall back to light defaults.
+  - `app/layout.tsx` — now wraps children in `<ClerkProvider>`; `RootLayout` is `async` (ClerkProvider returns `Promise<JSX.Element>` in v7). Metadata updated to `Ghost AI / Collaborative AI design canvas`.
+  - `app/page.tsx` — server component reading `auth()` from `@clerk/nextjs/server`; redirects `/editor` when signed in, `/sign-in` when signed out. Acts as a safety net for client-side navigations (the proxy is the primary gate).
+  - `components/editor/editor-navbar.tsx` — right flex section now renders `<UserButton appearance={authAppearance} />` (Clerk's default user menu/profile flows kept intact; only the post-logout destination is configured globally via `NEXT_PUBLIC_CLERK_SIGN_OUT_FALLBACK_REDIRECT_URL` if/when set).
+  - `.env.local` — added `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`. (Publishable and secret keys were already in place.)
+  - No changes to `globals.css` or any `components/ui/*` file.
+  - Verified: `bun run typecheck` (tsc --noEmit) exits 0, `bun run lint` exits 0, `bun run build` produces 5 routes + `Proxy (Middleware)` in the build output and exits 0. `bun run fmt:check` is clean on all new files; the 22 pre-existing drift files in `.claude/`, `.agents/`, and the spec markdown are unchanged. Dev server smoke test: `/sign-in` returns 200 with the two-panel layout (renders "Ghost AI", "Think out loud, ship out loud.", the 3-item feature list, and the Clerk form mount point); `/editor` returns 307 to `/sign-in?redirect_url=...` (proxy working); `/` is dev-mode-rewritten by Clerk to its dev-browser handshake page (expected behavior — production redirects to `/sign-in`).
 
 ## In Progress
 
@@ -35,13 +47,13 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- **Real-time canvas surface** (spec 03, depends on Liveblocks setup): React Flow integration with the eight node color pairs and six shapes documented in `ui-context.md`, plus the right slide-over AI sidebar shell.
-- **Route protection stub** (post spec 03): wire Clerk into `app/editor/layout.tsx` once Clerk is set up, so unauthenticated users are redirected to `/login`.
+- **Real-time canvas surface** (spec 04): React Flow integration with the eight node color pairs and six shapes documented in `ui-context.md`, plus the right slide-over AI sidebar shell.
 
 ## Open Questions
 
 - Pre-existing CRLF line endings in `.oxlintrc.json`, `CLAUDE.md`, and `commitlint.config.js` made `bun run fmt:check` fail. Worked around by adding them to `.oxfmtrc.json` `ignorePatterns` rather than reformatting them (surgical-changes rule). Worth a follow-up to either normalize the files to LF or document the CRLF convention in the project setup.
 - `oxfmt --check` now also reports formatting drift in `.claude/commands/ship-feature.md` and `.claude/context/specs/02-editor.md` (pre-existing, not introduced by spec 02). Either re-run the formatter on these files in a follow-up or extend `ignorePatterns` if the drift is intentional.
+- Clerk deprecation warning at dev-server boot: `createRouteMatcher` is deprecated and will be removed in the next major release. The spec 03 implementation uses it per the spec's "default-deny everything except public routes" pattern. When Clerk v8 lands, the migration target is resource-based auth checks (`auth().protect()` in each page/layout/server function that accesses protected data) — which would also let us drop the `proxy.ts` file entirely. Worth tracking but no action required now.
 
 ## Architecture Decisions
 
@@ -50,6 +62,10 @@ Update this file whenever the current phase, active feature, or implementation s
 - The shadcn variable names (`--background`, `--primary`, etc.) and the project's variable names (`--bg-base`, `--text-primary`, `--accent-primary`, etc.) coexist in `:root` so generated components and app-level code can each use their preferred naming without conversion.
 - `components/ui/*` are treated as protected third-party foundation components. Project-specific styling lives in `app/`, `components/` (composables), or future feature-level wrappers — never inside the generated shadcn files.
 - The shadcn `DialogContent` hardcodes `rounded-xl` and `bg-popover` in its className argument. The editor's `EditorDialog.Content` re-implements the same surface with project defaults (`rounded-3xl`, `bg-base`) applied — preserving animations and `showCloseButton` behavior. This is the pattern for any future shadcn primitive that needs project-style overrides without modifying the protected primitive.
+- Clerk uses the `shadcn` theme from `@clerk/ui/themes` (not the `dark` theme), because the project has shadcn installed. The `shadcn` theme is a prebuilt appearance that reads the standard shadcn CSS variable namespace (`--card`, `--card-foreground`, `--primary`, `--foreground`, `--muted`, `--input`, `--border`, `--ring`, `--destructive`, etc.) — these are already declared in `app/globals.css` `:root` and `.dark` with the project's dark hex values, so the theme inherits the dark palette automatically. The matching `@import "@clerk/ui/themes/shadcn.css"` line in `app/globals.css` (alongside the existing Tailwind imports) is what actually emits the shadcn-token-mapped classes into the bundle. Without that import, Clerk's "Manage account" / profile pages fall back to light defaults. **Do NOT override the `variables` block in the Clerk appearance with project-specific token names** (e.g. `--bg-base`, `--accent-primary`) — the per-component `appearance.variables` block **replaces** the theme's defaults rather than merging, so referencing non-shadcn variable names there causes UserProfile/AccountSettings to lose their shadcn-themed colors. Keep the `variables` block minimal (only `fontFamily` or similar non-conflicting keys) and put project-specific styling in the `elements` block instead, which is composable.
+- The `<UserButton>`'s appearance only propagates to the **popover menu** by default — the "Manage account" modal it opens (rendered as a separate `<UserProfile>` component) needs the same appearance passed via the `userProfileProps={{ appearance: ... }}` prop. Without this, the popover renders dark (correct) but the user-profile modal inside it falls back to Clerk's default light theme. The fix in `components/editor/editor-navbar.tsx` passes `authAppearance` to both the `appearance` prop and `userProfileProps.appearance` so the modal inherits the same theme.
+- Next 16 renamed Middleware to Proxy — `proxy.ts` at the project root is the new convention. The function inside is still `clerkMiddleware` from `@clerk/nextjs/server`; only the file name and the documented "Proxy" terminology changed.
+- The `ClerkProvider` in `@clerk/nextjs@7` is an async Server Component (`Promise<React.JSX.Element>`), so `RootLayout` is declared `async`. No client wrapper needed. Each Clerk surface (`<SignIn>`, `<SignUp>`, `<UserButton>`) receives the shared `authAppearance` per-instance, so the provider itself stays unopinionated and per-component `elements` overrides apply where needed.
 
 ## Session Notes
 
@@ -60,3 +76,6 @@ Update this file whenever the current phase, active feature, or implementation s
 - Spec 02 chose "components only, no route" so the chrome pieces can be reviewed and refined in isolation. The `useState`-based open/close wiring lands with the editor route in the next step — `EditorNavbar.onToggle` and `ProjectSidebar.onClose` are the two callbacks that will be connected.
 - Updated mid-spec: the user asked for the editor route to land in the same spec, so `app/editor/page.tsx` was added in this iteration rather than deferred. The page is a single client component (`h-dvh flex flex-col` shell) with no `app/editor/layout.tsx` — if a future editor-scoped provider stack accumulates, that's the natural extraction point.
 - `oxfmt --check` currently reports formatting issues in `.claude/commands/ship-feature.md` and `.claude/context/specs/02-editor.md` (pre-existing). Left untouched per the surgical-changes rule. Should be normalized in a follow-up.
+- The Clerk v7 `Variables` type uses different keys than the v6 / older docs (e.g. `colorInput` not `colorInputBackground`, `colorInputForeground` not `colorInputText`, `colorForeground` not `colorText`, `colorMutedForeground` not `colorTextSecondary`, `colorMuted` not `colorMutedBackground`). The `authAppearance` config maps the project tokens to the v7 names. `UserButton` no longer accepts `afterSignOutUrl` as a prop — post-logout destination is configured via `NEXT_PUBLIC_CLERK_SIGN_OUT_FALLBACK_REDIRECT_URL` env var or the `ClerkProvider` `signInFallbackRedirectUrl` prop. Left for a follow-up if a non-default post-logout page is needed.
+- The Clerk v7 type `ClerkAppearanceTheme` lives in `@clerk/shared/types` (re-exported via `@clerk/shared`); `@clerk/types` is a different older package that is not a direct dep here. The `authAppearance` is typed against `@clerk/shared/types` for that reason.
+- Dev-server smoke test on `/` shows Clerk's dev-browser handshake page (404 with `x-clerk-auth-reason: protect-rewrite, dev-browser-missing`) — this is the expected dev-mode behavior because no Clerk dev browser cookie is set. In production with a real auth session, the proxy redirects unauthenticated users to `/sign-in`; the page-level `auth()` redirect in `app/page.tsx` is the safety net for client-side navigations.

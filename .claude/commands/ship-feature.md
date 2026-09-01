@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 ## Context
 
-- Default branch: !`git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo main`
+- Default branch: !`git branch -r --list origin/HEAD`
 - Current branch: !`git branch --show-current`
 - Status: !`git status --short`
 - Staged diff: !`git diff --cached`
@@ -21,6 +21,8 @@ disable-model-invocation: true
 You are running `/ship-feature $ARGUMENTS`. Follow these steps in order. Do not skip the pause points — they are hard stops, not suggestions.
 
 ### 1. Resolve branch state
+
+Resolve default branch: use the Context `Default branch` value. If it is empty (e.g. `origin/HEAD` not set) treat it as `main`. If it contains `->` (e.g. `origin/HEAD -> origin/main`) extract the part after `->` and trim, then strip `origin/` prefix (`origin/main` -> `main`). If it is already `origin/main`, just strip `origin/`.
 
 - If **current branch == default branch**:
   - If `$ARGUMENTS` is empty, stop immediately and tell the user a branch name is required when on the default branch. Do not guess a name.

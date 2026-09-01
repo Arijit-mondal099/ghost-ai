@@ -1,8 +1,10 @@
 "use client";
 
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
+import { authAppearance } from "@/lib/auth-appearance";
 
 type EditorNavbarProps = {
   isOpen: boolean;
@@ -24,7 +26,9 @@ function EditorNavbar({ isOpen, onToggle }: EditorNavbarProps) {
         </Button>
       </div>
       <div className="flex items-center" />
-      <div className="flex items-center" />
+      <div className="flex items-center">
+        <UserButton appearance={authAppearance} userProfileProps={{ appearance: authAppearance }} />
+      </div>
     </header>
   );
 }
