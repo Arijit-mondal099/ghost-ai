@@ -11,9 +11,9 @@
         "@commitlint/config-conventional": "^21.2.2",
         "@prisma/adapter-pg": "^7.8.0",
         "@prisma/client": "^7.8.0",
-        "@prisma/extension-accelerate": "^3.0.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
+        "dotenv": "^17.4.2",
         "lucide-react": "^1.11.0",
         "next": "16.3.4",
         "pg": "^8.20.0",
@@ -397,8 +397,6 @@
     "@prisma/engines": ["@prisma/engines@7.8.0", "", { "dependencies": { "@prisma/debug": "7.8.0", "@prisma/engines-version": "7.8.0-6.3c6e192761c0362d496ed980de936e2f3cebcd3a", "@prisma/fetch-engine": "7.8.0", "@prisma/get-platform": "7.8.0" } }, "sha512-jx3rCnNNrt5uzbkKlegtQ2GZHxSlihMCzutgT/BP6UIDF1r9tDI39hV/0T/cHZgzJ3ELbuQPXlVZy+Y1n0pcgw=="],
 
     "@prisma/engines-version": ["@prisma/engines-version@7.8.0-6.3c6e192761c0362d496ed980de936e2f3cebcd3a", "", {}, "sha512-fJPQxCkLgA5EayWaW8eArgCvjJ+N+Kz3VyeNKMEeYiQC4alNkxRKFVAGxv/ZUzuJISKqdw+zGeDbS6mn6RCPOA=="],
-
-    "@prisma/extension-accelerate": ["@prisma/extension-accelerate@3.0.1", "", { "peerDependencies": { "@prisma/client": ">=4.16.1" } }, "sha512-xc+kn4AjjTzS9jsdD1JWCebB09y0Aj+C8GjjG7oUm81PF9psvmJOw5rxpl7tOEBz/8hmuNX996XL28ys/OLxVA=="],
 
     "@prisma/fetch-engine": ["@prisma/fetch-engine@7.8.0", "", { "dependencies": { "@prisma/debug": "7.8.0", "@prisma/engines-version": "7.8.0-6.3c6e192761c0362d496ed980de936e2f3cebcd3a", "@prisma/get-platform": "7.8.0" } }, "sha512-gwB0Euiz/DDRyxFRpLXYlK3RfaZUj1c5dAYMuhZYfApg7arknJlcb9bIsOHDppJmbqYaVA+yBIiFMDBfprsNPQ=="],
 
