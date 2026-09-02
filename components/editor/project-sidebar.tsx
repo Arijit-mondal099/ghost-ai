@@ -47,6 +47,7 @@ function ProjectSidebar({
         />
       ) : null}
       <aside
+        inert={!isOpen}
         aria-hidden={!isOpen}
         className={cn(
           "fixed left-0 top-14 bottom-0 z-40 flex w-72 flex-col border-r border-surface-border bg-base/95 backdrop-blur-md transition-transform duration-200",

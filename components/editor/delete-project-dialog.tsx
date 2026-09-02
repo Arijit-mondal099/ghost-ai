@@ -31,9 +31,9 @@ function DeleteProjectDialog({
         <EditorDialog.Header>
           <EditorDialog.Title>Delete project</EditorDialog.Title>
           <EditorDialog.Description>
-            This will permanently delete{" "}
-            <span className="font-medium text-copy-primary">{project?.name ?? "this project"}</span>{" "}
-            and all of its data. This action cannot be undone.
+            Are you sure you want to delete{" "}
+            <span className="font-medium text-copy-primary">{project?.name ?? "this project"}</span>
+            {"?"}
           </EditorDialog.Description>
         </EditorDialog.Header>
         <EditorDialog.Footer>
