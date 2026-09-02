@@ -92,6 +92,10 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - None.
 
+## Deployment Prerequisites (run before enabling /editor)
+
+- Apply `prisma/migrations/20260902122814_init_project_models` to Neon before `/editor` serves traffic: `bunx prisma migrate deploy` against the Neon `DATABASE_URL` (`lib/projects-data.ts:30` `getProjectsForCurrentUser` and all `app/api/projects/*` CRUD handlers require the migrated schema; missing table surfaces as `P2021`). The migration was previously applied only to the local `prisma dev` Postgres (see Completed: Spec 07). Verify with `bunx prisma migrate status`.
+
 ## Next Up
 
 - **Manual smoke matrix against Neon** (no spec — just the four-path create / rename / delete exercise per the spec 07 Check-When-Done list, plus the empty-DB initial load). Prerequisite: `bunx prisma migrate deploy` to apply `20260902122814_init_project_models` to Neon (the migration was previously applied only to the local `prisma dev` Postgres).

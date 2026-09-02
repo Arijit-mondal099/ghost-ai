@@ -12,6 +12,7 @@ import { requireUserId } from "@/lib/api/auth";
 import {
   badRequest,
   forbidden,
+  HttpError,
   json,
   noContent,
   notFound,
@@ -41,8 +42,9 @@ async function resolveContext(
   let userId: string | null = null;
   try {
     userId = await requireUserId();
-  } catch {
-    return { kind: "auth" };
+  } catch (error) {
+    if (error instanceof HttpError) return { kind: "auth" };
+    throw error;
   }
 
   const { projectId } = await ctx.params;

@@ -119,23 +119,27 @@ export function useProjectActions(initialProjects: Project[]): UseProjectActions
     // stable key. Not yet persisted — the API derives the cuid PK.
     reserveRoomSuffix(slugify(name));
 
-    const response = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
 
-    if (!response.ok) {
-      const message = await readError(response);
-      console.error("Failed to create project:", message);
+      if (!response.ok) {
+        const message = await readError(response);
+        console.error("Failed to create project:", message);
+        return;
+      }
+
+      setDialog({ type: null });
+      setFormName("");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to create project:", error);
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    setDialog({ type: null });
-    setFormName("");
-    setIsSubmitting(false);
-    router.refresh();
   }, [dialog, formName, reserveRoomSuffix, router]);
 
   const submitRename = useCallback(async () => {
@@ -146,23 +150,27 @@ export function useProjectActions(initialProjects: Project[]): UseProjectActions
     if (name === target.name) return;
     setIsSubmitting(true);
 
-    const response = await fetch(`/api/projects/${target.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    try {
+      const response = await fetch(`/api/projects/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
 
-    if (!response.ok) {
-      const message = await readError(response);
-      console.error("Failed to rename project:", message);
+      if (!response.ok) {
+        const message = await readError(response);
+        console.error("Failed to rename project:", message);
+        return;
+      }
+
+      setDialog({ type: null });
+      setFormName("");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to rename project:", error);
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    setDialog({ type: null });
-    setFormName("");
-    setIsSubmitting(false);
-    router.refresh();
   }, [dialog, formName, router]);
 
   const submitConfirmDelete = useCallback(async () => {
@@ -170,19 +178,23 @@ export function useProjectActions(initialProjects: Project[]): UseProjectActions
     const target = dialog.project;
     setIsSubmitting(true);
 
-    const response = await fetch(`/api/projects/${target.id}`, { method: "DELETE" });
+    try {
+      const response = await fetch(`/api/projects/${target.id}`, { method: "DELETE" });
 
-    if (!response.ok) {
-      const message = await readError(response);
-      console.error("Failed to delete project:", message);
+      if (!response.ok) {
+        const message = await readError(response);
+        console.error("Failed to delete project:", message);
+        return;
+      }
+
+      setDialog({ type: null });
+      router.push("/editor");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to delete project:", error);
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    setDialog({ type: null });
-    setIsSubmitting(false);
-    router.push("/editor");
-    router.refresh();
   }, [dialog, router]);
 
   return {

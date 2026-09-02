@@ -9,7 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
-import { badRequest, json, unauthorized } from "@/lib/api/responses";
+import { badRequest, HttpError, json, unauthorized } from "@/lib/api/responses";
 import { parseCreateProjectBody } from "@/lib/api/validation";
 
 const PROJECT_SELECT = {
@@ -26,8 +26,9 @@ async function resolveUser(): Promise<{ kind: "ok"; userId: string } | { kind: "
   try {
     const userId = await requireUserId();
     return { kind: "ok", userId };
-  } catch {
-    return { kind: "auth" };
+  } catch (error) {
+    if (error instanceof HttpError) return { kind: "auth" };
+    throw error;
   }
 }
 
@@ -41,7 +42,7 @@ export async function GET(): Promise<Response> {
     select: PROJECT_SELECT,
   });
 
-  return json({ projects });
+  return json({ projects }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request): Promise<Response> {
