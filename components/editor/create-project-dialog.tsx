@@ -36,7 +36,7 @@ function CreateProjectDialog({
     <EditorDialog.Root open={open} onOpenChange={onOpenChange}>
       <EditorDialog.Content>
         <EditorDialog.Header>
-          <EditorDialog.Title>Create project</EditorDialog.Title>
+          <h3 className="text-lg font-medium text-accent">Create project</h3>
           <EditorDialog.Description>
             Give your architecture workspace a name.
           </EditorDialog.Description>

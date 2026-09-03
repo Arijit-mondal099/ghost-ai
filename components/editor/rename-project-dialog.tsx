@@ -39,7 +39,7 @@ function RenameProjectDialog({
     <EditorDialog.Root open={open} onOpenChange={onOpenChange}>
       <EditorDialog.Content>
         <EditorDialog.Header>
-          <EditorDialog.Title>Rename project</EditorDialog.Title>
+          <h3 className="text-lg font-medium text-accent">Rename project</h3>
           <EditorDialog.Description>
             Current name: <span className="text-copy-primary">{project?.name ?? "—"}</span>
           </EditorDialog.Description>
