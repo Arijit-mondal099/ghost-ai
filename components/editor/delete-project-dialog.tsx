@@ -29,7 +29,7 @@ function DeleteProjectDialog({
     <EditorDialog.Root open={open} onOpenChange={onOpenChange}>
       <EditorDialog.Content showCloseButton={false}>
         <EditorDialog.Header>
-          <h3 className="text-lg font-medium text-accent">Delete project</h3>
+          <h3 className="text-lg font-medium">Delete project</h3>
           <EditorDialog.Description>
             Are you sure you want to delete{" "}
             <span className="font-medium text-copy-primary">{project?.name ?? "this project"}</span>

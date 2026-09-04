@@ -12,9 +12,10 @@ import { slugify, type Project } from "@/lib/projects";
 // The project list is owned by the server component (`app/editor/page.tsx`)
 // and passed in via `initialProjects` so the list survives `router.refresh()`
 // without a client-side cache. The hook derives `ownedProjects` /
-// `sharedProjects` from that input; the three submit handlers call
-// `fetch` against `/api/projects` and then `router.refresh()` to re-fetch
-// the server data.
+// `sharedProjects` from that input. The Rename and Delete handlers call
+// `fetch` + `router.refresh()`; the Create handler navigates straight into
+// the new workspace (`/editor/{id}`) so the user lands on the canvas
+// without an intermediate refresh.
 //
 // Room ID generation is a stub for the upcoming real-time canvas spec:
 // `slugify(name) + "-" + shortSuffix()`. The room ID is not yet sent to
@@ -132,9 +133,14 @@ export function useProjectActions(initialProjects: Project[]): UseProjectActions
         return;
       }
 
+      // The 201 body is the full project record (see PROJECT_SELECT in
+      // app/api/projects/route.ts). The new project's `id` is also the
+      // workspace URL slug for now (treated as Project.id per spec 08).
+      const created = (await response.json()) as { id: string };
+
       setDialog({ type: null });
       setFormName("");
-      router.refresh();
+      router.push(`/editor/${created.id}`);
     } catch (error) {
       console.error("Failed to create project:", error);
     } finally {
