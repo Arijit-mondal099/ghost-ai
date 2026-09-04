@@ -24,7 +24,7 @@ type EditorNavbarProps = {
 function EditorNavbar({ isOpen, onToggle, center, rightActions }: EditorNavbarProps) {
   return (
     <header className="relative z-50 flex h-14 w-full items-center justify-between border-b border-surface-border bg-base px-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-1 items-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -41,7 +41,7 @@ function EditorNavbar({ isOpen, onToggle, center, rightActions }: EditorNavbarPr
           <div className="truncate text-sm font-medium text-copy-primary">{center}</div>
         ) : null}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-1 items-center justify-end gap-2">
         {rightActions}
         <UserButton appearance={authAppearance} userProfileProps={{ appearance: authAppearance }} />
       </div>
