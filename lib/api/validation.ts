@@ -95,3 +95,40 @@ export function parseRenameProjectBody(input: unknown): ParseResult<RenameProjec
   }
   return { ok: true, value: { name: name.value } };
 }
+
+// ---------------------------------------------------------------------------
+// Collaborator invite body. The email is lowercased + trimmed so the
+// `@@unique([projectId, email])` constraint catches duplicates regardless
+// of input casing, and the Clerk enrichment lookup uses the same canonical
+// form. Clerk is the source of truth for "does this account exist" — the
+// route handler does a separate pre-check via findUserByEmail and returns
+// 400 USER_NOT_FOUND on miss.
+// ---------------------------------------------------------------------------
+
+export type InviteCollaboratorBody = { email: string };
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function parseInviteCollaboratorBody(input: unknown): ParseResult<InviteCollaboratorBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["email"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  if (!("email" in input) || input["email"] === undefined || input["email"] === null) {
+    return invalidBody("INVALID_BODY", "email is required");
+  }
+  const raw = input["email"];
+  if (typeof raw !== "string") {
+    return invalidBody("INVALID_BODY", "email must be a string");
+  }
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed.length === 0) {
+    return invalidBody("INVALID_BODY", "email is required");
+  }
+  if (!EMAIL_REGEX.test(trimmed)) {
+    return invalidBody("INVALID_EMAIL", "email is not a valid address");
+  }
+  return { ok: true, value: { email: trimmed } };
+}

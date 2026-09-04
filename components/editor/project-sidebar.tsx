@@ -21,6 +21,8 @@ type ProjectSidebarProps = {
   isOpen: boolean;
   ownedProjects: Project[];
   sharedProjects: Project[];
+  currentRoomId?: string;
+  inline?: boolean;
   onClose: () => void;
   onCreate: () => void;
   onRename: (project: Project) => void;
@@ -31,11 +33,96 @@ function ProjectSidebar({
   isOpen,
   ownedProjects,
   sharedProjects,
+  currentRoomId,
+  inline = false,
   onClose,
   onCreate,
   onRename,
   onDelete,
 }: ProjectSidebarProps) {
+  if (inline) {
+    return (
+      <>
+        {isOpen ? (
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={onClose}
+            className="fixed inset-0 z-30 bg-black/40 backdrop-blur-xs md:hidden"
+          />
+        ) : null}
+        <aside
+          inert={!isOpen}
+          aria-hidden={!isOpen}
+          className={cn("h-full w-72 flex-col border-r-0 bg-base", isOpen ? "flex" : "hidden")}
+        >
+          <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+            <span className="text-sm font-medium text-copy-primary">Projects</span>
+            <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close sidebar">
+              <XIcon />
+            </Button>
+          </div>
+
+          <Tabs defaultValue="mine" className="flex flex-1 flex-col overflow-hidden px-4 pt-3">
+            <TabsList className="w-full">
+              <TabsTrigger value="mine" className="flex-1">
+                My Projects
+              </TabsTrigger>
+              <TabsTrigger value="shared" className="flex-1">
+                Shared
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="mine" className="mt-3 flex-1 overflow-hidden">
+              {ownedProjects.length === 0 ? (
+                <p className="text-sm text-copy-muted">No projects yet.</p>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="flex flex-col gap-0.5 pb-2">
+                    {ownedProjects.map((project) => (
+                      <ProjectItem
+                        key={project.id}
+                        project={project}
+                        isActive={project.id === currentRoomId}
+                        onRename={onRename}
+                        onDelete={onDelete}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </TabsContent>
+            <TabsContent value="shared" className="mt-3 flex-1 overflow-hidden">
+              {sharedProjects.length === 0 ? (
+                <p className="text-sm text-copy-muted">No shared projects yet.</p>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="flex flex-col gap-0.5 pb-2">
+                    {sharedProjects.map((project) => (
+                      <ProjectItem
+                        key={project.id}
+                        project={project}
+                        isActive={project.id === currentRoomId}
+                        onRename={onRename}
+                        onDelete={onDelete}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          <div className="border-t border-surface-border p-4">
+            <Button variant="default" className="w-full" onClick={onCreate}>
+              <PlusIcon />
+              New Project
+            </Button>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   return (
     <>
       {isOpen ? (
@@ -80,6 +167,7 @@ function ProjectSidebar({
                     <ProjectItem
                       key={project.id}
                       project={project}
+                      isActive={project.id === currentRoomId}
                       onRename={onRename}
                       onDelete={onDelete}
                     />
@@ -98,6 +186,7 @@ function ProjectSidebar({
                     <ProjectItem
                       key={project.id}
                       project={project}
+                      isActive={project.id === currentRoomId}
                       onRename={onRename}
                       onDelete={onDelete}
                     />
