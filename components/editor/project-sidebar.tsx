@@ -51,7 +51,11 @@ function ProjectSidebar({
             className="fixed inset-0 z-30 bg-black/40 backdrop-blur-xs md:hidden"
           />
         ) : null}
-        <aside className="flex h-full w-72 flex-col border-r-0 bg-base">
+        <aside
+          inert={!isOpen}
+          aria-hidden={!isOpen}
+          className={cn("h-full w-72 flex-col border-r-0 bg-base", isOpen ? "flex" : "hidden")}
+        >
           <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
             <span className="text-sm font-medium text-copy-primary">Projects</span>
             <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close sidebar">
