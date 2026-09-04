@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Client hook for the share dialog. Mirrors the controlled-dialog pattern
@@ -77,7 +77,15 @@ export function useShareDialog({ projectId }: UseShareDialogArgs): UseShareDialo
   const [owner, setOwner] = useState<ShareOwner | null>(null);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
 
+  // Monotonic refresh generation — only the latest request may apply state.
+  // An earlier GET (e.g. from dialog open) can otherwise resolve after the
+  // refresh triggered by an invite/remove and restore a stale list.
+  const refreshGeneration = useRef(0);
+
   const refresh = useCallback(async () => {
+    refreshGeneration.current += 1;
+    const generation = refreshGeneration.current;
+    const isLatest = () => generation === refreshGeneration.current;
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -85,6 +93,7 @@ export function useShareDialog({ projectId }: UseShareDialogArgs): UseShareDialo
         cache: "no-store",
       });
       if (!response.ok) {
+        if (!isLatest()) return;
         const { message } = await readError(response);
         setErrorMessage(message);
         return;
@@ -93,13 +102,15 @@ export function useShareDialog({ projectId }: UseShareDialogArgs): UseShareDialo
         owner: ShareOwner;
         collaborators: Collaborator[];
       };
+      if (!isLatest()) return;
       setOwner(body.owner);
       setCollaborators(body.collaborators);
     } catch (error) {
+      if (!isLatest()) return;
       console.error("Failed to load collaborators", error);
       setErrorMessage("Failed to load collaborators");
     } finally {
-      setIsLoading(false);
+      if (isLatest()) setIsLoading(false);
     }
   }, [projectId]);
 
