@@ -46,10 +46,14 @@ export function displayNameFromClerk(user: ClerkUser): string | null {
   return null;
 }
 
-function userToEnriched(user: ClerkUser): EnrichedUser {
+function userToEnriched(user: ClerkUser, requestedEmail?: string): EnrichedUser {
   const primary = user.emailAddresses?.[0]?.emailAddress.toLowerCase() ?? "";
+  // Preserve the invited address that matched, not the Clerk primary — the
+  // caller looked this user up by `requestedEmail`, and downstream code
+  // (enrichCollaborators → byEmail map) keys rows by the invited address.
+  // Falling back to the primary would break the map for secondary addresses.
   return {
-    email: primary,
+    email: (requestedEmail ?? primary).toLowerCase(),
     name: displayNameFromClerk(user),
     imageUrl: user.imageUrl ? user.imageUrl : null,
   };
@@ -66,7 +70,7 @@ export async function findUserByEmail(email: string): Promise<EnrichedUser | nul
       (u.emailAddresses ?? []).some((ea) => ea.emailAddress.toLowerCase() === normalized),
     );
     if (!match) return null;
-    return userToEnriched(match);
+    return userToEnriched(match, normalized);
   } catch (error) {
     console.error("Clerk lookup failed for", normalized, error);
     return null;

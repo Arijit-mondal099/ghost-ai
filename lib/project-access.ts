@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 export type CurrentIdentity = {
   userId: string;
   email: string;
+  emails: string[];
 };
 
 export type AccessibleProject = {
@@ -29,10 +30,15 @@ export async function getCurrentIdentity(): Promise<CurrentIdentity | null> {
   if (!userId) return null;
 
   const user = await currentUser();
-  const email = user?.emailAddresses[0]?.emailAddress;
+  // Collect every address, not just the primary — a collaborator invited via
+  // a secondary email must still pass the access check below.
+  const emails = (user?.emailAddresses ?? [])
+    .map((ea) => ea.emailAddress.toLowerCase())
+    .filter((address) => address.length > 0);
+  const email = emails[0] ?? "";
   if (!email) return null;
 
-  return { userId, email };
+  return { userId, email, emails };
 }
 
 export async function getAccessibleProject(
@@ -44,7 +50,10 @@ export async function getAccessibleProject(
   return prisma.project.findFirst({
     where: {
       id: roomId,
-      OR: [{ ownerId: identity.userId }, { collaborators: { some: { email: identity.email } } }],
+      OR: [
+        { ownerId: identity.userId },
+        { collaborators: { some: { email: { in: identity.emails } } } },
+      ],
     },
     select: { id: true, name: true, ownerId: true },
   });

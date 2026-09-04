@@ -50,14 +50,20 @@ async function resolveReadAccess(
   const trimmedId = projectId.trim();
 
   const me = await currentUser();
-  const userEmail = me?.emailAddresses[0]?.emailAddress.toLowerCase() ?? "";
+  // Match against every verified address on the Clerk user, not just the
+  // primary — an invite addressed to a secondary email must still resolve.
+  const userEmails = (me?.emailAddresses ?? [])
+    .map((ea) => ea.emailAddress.toLowerCase())
+    .filter((address) => address.length > 0);
 
   const project = await prisma.project.findFirst({
     where: {
       id: trimmedId,
       OR: [
         { ownerId: userId },
-        ...(userEmail ? [{ collaborators: { some: { email: userEmail } } }] : []),
+        ...(userEmails.length > 0
+          ? [{ collaborators: { some: { email: { in: userEmails } } } }]
+          : []),
       ],
     },
     select: { id: true },

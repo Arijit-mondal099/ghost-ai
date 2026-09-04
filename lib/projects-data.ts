@@ -30,7 +30,12 @@ export async function getProjectsForCurrentUser(): Promise<ProjectsForUser> {
   }
 
   const user = await currentUser();
-  const email = user?.emailAddresses[0]?.emailAddress.toLowerCase() ?? "";
+  // Match invites against every address on the Clerk user — a project shared
+  // with a secondary email must still show up in the shared tab.
+  const emails = (user?.emailAddresses ?? [])
+    .map((ea) => ea.emailAddress.toLowerCase())
+    .filter((address) => address.length > 0);
+  const email = emails[0] ?? "";
 
   const [ownedRows, sharedRows] = await Promise.all([
     prisma.project.findMany({
@@ -40,7 +45,7 @@ export async function getProjectsForCurrentUser(): Promise<ProjectsForUser> {
     }),
     email.length > 0
       ? prisma.project.findMany({
-          where: { collaborators: { some: { email } } },
+          where: { collaborators: { some: { email: { in: emails } } } },
           orderBy: { createdAt: "desc" },
           select: { id: true, name: true, ownerId: true },
         })

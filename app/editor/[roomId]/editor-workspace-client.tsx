@@ -44,9 +44,17 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const { user } = useUser();
-  const currentUserEmail = user?.emailAddresses[0]?.emailAddress ?? null;
   const dialogs = useProjectActions(projects);
   const share = useShareDialog({ projectId: project.id });
+  // Prefer the user's address that actually appears in the collaborator list
+  // (an invite may target a secondary email); fall back to the primary.
+  const allUserEmails = user?.emailAddresses?.map((ea) => ea.emailAddress) ?? [];
+  const currentUserEmail =
+    allUserEmails.find((address) =>
+      share.collaborators.some((row) => row.email.toLowerCase() === address.toLowerCase()),
+    ) ??
+    allUserEmails[0] ??
+    null;
 
   return (
     <div className="flex h-dvh flex-col bg-base">
