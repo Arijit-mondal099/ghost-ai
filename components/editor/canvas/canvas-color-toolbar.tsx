@@ -16,11 +16,14 @@ import { NODE_COLORS, type CanvasEdge, type CanvasNode } from "@/types/canvas";
 // positioning math below places it in the same coordinate system as the
 // delete pill at `canvas-room.tsx:115-128`.
 //
-// Screen position math: `positionAbsolute` (computed by React Flow from the
-// flow-space `position`, viewport `x/y`, and zoom) is the screen-space
-// top-left of the node. Adding `width * zoom / 2` puts the anchor on the
-// node's horizontal center; subtracting the toolbar height (constant) plus
-// an 8px gap puts the toolbar's bottom edge 8px above the node's top edge.
+// Screen position math: flow-space `position` is anchored at `origin`
+// (dropped / template nodes use `origin: [0.5, 0.5]`, so `position` is the
+// node center). Subtract `origin * dimensions` to recover the top-left,
+// then convert to screen space with the viewport `x/y` + `zoom`.
+// Adding `width * zoom / 2` puts the anchor on the node's horizontal
+// center; `translate(-50%, -100%)` on the toolbar root lifts it entirely
+// above that anchor, so only an 8px gap is subtracted to leave space
+// between the toolbar's bottom edge and the node's top edge.
 // Using the live viewport + the live `nodes` array from `useLiveblocksFlow`
 // means a single re-render per frame when panning/zooming/dragging — no
 // `requestAnimationFrame` queueing needed.
@@ -34,11 +37,9 @@ import { NODE_COLORS, type CanvasEdge, type CanvasNode } from "@/types/canvas";
 // Spec: .claude/context/specs/15-nodes-color-toolbar.md
 // ---------------------------------------------------------------------------
 
-// Toolbar height is constant (rounded-2xl pill, 1.5 vertical padding,
-// 18px swatches) — hard-coded so the `top` math doesn't need a ref-read +
-// re-render cycle. The single `useLayoutEffect` ref-reads once on mount to
-// verify; if a future redesign changes the height, bump this constant.
-const TOOLBAR_HEIGHT = 40;
+// `TOOLBAR_GAP` leaves space between the toolbar's bottom edge and the
+// node's top edge. No height constant is needed — the root's
+// `translate(-50%, -100%)` already lifts the toolbar by its own height.
 const TOOLBAR_GAP = 8;
 
 const swatchClassName =
@@ -88,12 +89,15 @@ function CanvasColorToolbar() {
   if (!mounted) return null;
   if (node === null) return null;
 
-  // Screen-space top-center anchor: flow-space `position` is the top-left
-  // of the node's measured box; the viewport `x`/`y` is the canvas
-  // translation; `zoom` scales everything.
+  // Screen-space top-center anchor: `position` is origin-anchored
+  // (`origin: [0.5, 0.5]` on canvas nodes means the center), so recover
+  // the top-left first; the viewport `x`/`y` is the canvas translation
+  // and `zoom` scales everything.
   const nodeWidth = node.measured?.width ?? node.width ?? 0;
-  const left = node.position.x * zoom + vx + (nodeWidth * zoom) / 2;
-  const top = node.position.y * zoom + vy;
+  const nodeHeight = node.measured?.height ?? node.height ?? 0;
+  const [originX, originY] = node.origin ?? [0, 0];
+  const left = (node.position.x - originX * nodeWidth) * zoom + vx + (nodeWidth * zoom) / 2;
+  const top = (node.position.y - originY * nodeHeight) * zoom + vy;
 
   return (
     <div
@@ -108,10 +112,9 @@ function CanvasColorToolbar() {
       className="nodrag nopan absolute z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-surface-border bg-elevated/95 px-2 py-1.5 shadow-lg backdrop-blur-md"
       style={{
         left,
-        // `-100%` shift lifts the toolbar entirely above the `top` anchor;
-        // combined with the `top` being the node's top edge, this leaves
-        // `TOOLBAR_GAP` pixels between the toolbar's bottom and the node.
-        top: top - TOOLBAR_HEIGHT - TOOLBAR_GAP,
+        // `-100%` in the root `transform` lifts the toolbar entirely above
+        // the `top` anchor (the node's top edge); subtract only the gap.
+        top: top - TOOLBAR_GAP,
         transform: "translate(-50%, -100%)",
         pointerEvents: paneDragging ? "none" : "auto",
       }}
