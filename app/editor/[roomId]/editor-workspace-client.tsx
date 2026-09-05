@@ -5,6 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import { Share2Icon, SparklesIcon, XIcon } from "lucide-react";
 
 import {
+  CanvasRoom,
   CreateProjectDialog,
   DeleteProjectDialog,
   EditorNavbar,
@@ -94,12 +95,12 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
 
       <main
         className={cn(
-          "flex flex-1 items-center justify-center px-6 transition-all duration-200",
+          "flex h-full w-full flex-1 items-center justify-center transition-all duration-200",
           isSidebarOpen ? "pl-72" : "pl-0",
           isAiSidebarOpen ? "pr-80" : "pr-0",
         )}
       >
-        <p className="text-sm text-copy-muted">Canvas</p>
+        <CanvasRoom roomId={project.id} />
       </main>
 
       <aside
