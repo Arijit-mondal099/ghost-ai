@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { Share2Icon, SparklesIcon, XIcon } from "lucide-react";
+import { LayoutTemplateIcon, Share2Icon, SparklesIcon, XIcon } from "lucide-react";
 
 import {
   CanvasRoom,
@@ -12,6 +12,7 @@ import {
   ProjectSidebar,
   RenameProjectDialog,
   ShareProjectDialog,
+  StarterTemplatesModal,
 } from "@/components/editor";
 import { Button } from "@/components/ui/button";
 import { useProjectActions } from "@/hooks/use-project-actions";
@@ -44,6 +45,11 @@ type EditorWorkspaceClientProps = {
 function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceClientProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  // Bumped after each successful template import so the in-canvas fit
+  // trigger (`CanvasTemplateFitOnLoad`) can fire `fitView()` once the new
+  // nodes/edges are in storage.
+  const [templateFitVersion, setTemplateFitVersion] = useState(0);
   const { user } = useUser();
   const dialogs = useProjectActions(projects);
   const share = useShareDialog({ projectId: project.id });
@@ -68,6 +74,15 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
             <Button variant="outline" size="sm" onClick={share.open} aria-label="Share project">
               <Share2Icon />
               Share
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsTemplatesOpen(true)}
+              aria-label="Open starter templates"
+            >
+              <LayoutTemplateIcon />
+              Templates
             </Button>
             <Button
               type="button"
@@ -100,7 +115,16 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
           isAiSidebarOpen ? "pr-80" : "pr-0",
         )}
       >
-        <CanvasRoom roomId={project.id} />
+        <CanvasRoom roomId={project.id} templateFitVersion={templateFitVersion}>
+          {/* Rendered inside <RoomProvider> so `useMutation` inside
+              `useCanvasTemplateLoad` resolves the room context. The Radix
+              Dialog portal keeps the visual position unchanged. */}
+          <StarterTemplatesModal
+            open={isTemplatesOpen}
+            onOpenChange={setIsTemplatesOpen}
+            onImported={() => setTemplateFitVersion((v) => v + 1)}
+          />
+        </CanvasRoom>
       </main>
 
       <aside

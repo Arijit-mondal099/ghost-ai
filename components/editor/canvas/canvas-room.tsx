@@ -7,7 +7,6 @@ import {
   BackgroundVariant,
   ConnectionMode,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
 } from "@xyflow/react";
@@ -18,8 +17,12 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 
 import { TrashIcon } from "lucide-react";
 
-import { CanvasNode as CanvasNodeRenderer } from "@/components/editor/canvas/canvas-node";
+import { CanvasColorToolbar } from "@/components/editor/canvas/canvas-color-toolbar";
+import { CanvasControlBar } from "@/components/editor/canvas/canvas-control-bar";
 import { CanvasEdge as CanvasEdgeRenderer } from "@/components/editor/canvas/canvas-edge";
+import { CanvasNode as CanvasNodeRenderer } from "@/components/editor/canvas/canvas-node";
+import { CanvasTemplateFitOnLoad } from "@/components/editor/canvas/canvas-template-fit-on-load";
+import { ShapeDragPreview } from "@/components/editor/canvas/shape-drag-preview";
 import { ShapePanel } from "@/components/editor/canvas/shape-panel";
 import { useCanvasDelete } from "@/hooks/use-canvas-delete";
 import { useCanvasDrop } from "@/hooks/use-canvas-drop";
@@ -43,10 +46,28 @@ import { canvasEdge, canvasNode, type CanvasEdge, type CanvasNode } from "@/type
 //
 // Spec: .claude/context/specs/11-base-canvas.md
 // Spec: .claude/context/specs/12-shape-panel.md (drop handlers + shape panel)
+// Spec: .claude/context/specs/17-canvas-ergonomics.md (control bar mount)
 // ---------------------------------------------------------------------------
 
 type CanvasRoomProps = {
   roomId: string;
+  /**
+   * Bumped by the workspace client each time a starter template is imported.
+   * Mounting the in-canvas fit trigger is opt-in so a host that does not
+   * pass this prop pays zero cost.
+   */
+  templateFitVersion?: number;
+  /**
+   * Optional sibling rendered inside `<RoomProvider>` so any dialogs that
+   * call Liveblocks hooks (e.g. `useMutation`) resolve the room context.
+   * Radix Dialog portals the visual markup to `document.body`, so children
+   * can be passed as JSX from the workspace client without affecting the
+   * canvas layout. The slot lives OUTSIDE the `<ErrorBoundary>` so an
+   * upstream connection error cannot block modal interaction, and OUTSIDE
+   * the `<ClientSideSuspense>` so the dialog does not have to wait for
+   * storage to connect before it can render.
+   */
+  children?: React.ReactNode;
 };
 
 function CanvasErrorFallback({ error }: FallbackProps) {
@@ -69,7 +90,7 @@ const edgeTypes = { [canvasEdge]: CanvasEdgeRenderer } as const;
 // the inner component lets us call the hook *inside* the provider without
 // affecting the outer `<Canvas />` lifecycle or the `useLiveblocksFlow`
 // suspense boundary.
-function CanvasSurface() {
+function CanvasSurface({ templateFitVersion }: { templateFitVersion?: number }) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onDelete } = useLiveblocksFlow<
     CanvasNode,
     CanvasEdge
@@ -98,17 +119,11 @@ function CanvasSurface() {
           markerEnd: { type: MarkerType.ArrowClosed, color: "var(--text-secondary)" },
         }}
         fitView
+        zoomOnDoubleClick={false}
         className="h-full w-full"
         style={{ background: "var(--bg-base)" }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--text-faint)" />
-        <MiniMap
-          pannable
-          zoomable
-          maskColor="rgba(17, 17, 17, 0.8)"
-          style={{ background: "var(--bg-surface)" }}
-          nodeColor={() => "var(--text-secondary)"}
-        />
       </ReactFlow>
       {selectedCount > 0 && (
         <div className="absolute top-4 left-1/2 z-40 -translate-x-1/2">
@@ -125,19 +140,25 @@ function CanvasSurface() {
         </div>
       )}
       <ShapePanel />
+      <ShapeDragPreview />
+      <CanvasColorToolbar />
+      <CanvasControlBar />
+      {templateFitVersion !== undefined ? (
+        <CanvasTemplateFitOnLoad version={templateFitVersion} />
+      ) : null}
     </div>
   );
 }
 
-function Canvas() {
+function Canvas({ templateFitVersion }: { templateFitVersion?: number }) {
   return (
     <ReactFlowProvider>
-      <CanvasSurface />
+      <CanvasSurface templateFitVersion={templateFitVersion} />
     </ReactFlowProvider>
   );
 }
 
-function CanvasRoom({ roomId }: CanvasRoomProps) {
+function CanvasRoom({ roomId, templateFitVersion, children }: CanvasRoomProps) {
   return (
     <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
       <RoomProvider id={roomId} initialPresence={{ cursor: null, isThinking: false }}>
@@ -149,8 +170,9 @@ function CanvasRoom({ roomId }: CanvasRoomProps) {
               </div>
             }
           >
-            <Canvas />
+            <Canvas templateFitVersion={templateFitVersion} />
           </ClientSideSuspense>
+          {children}
         </ErrorBoundary>
       </RoomProvider>
     </LiveblocksProvider>
