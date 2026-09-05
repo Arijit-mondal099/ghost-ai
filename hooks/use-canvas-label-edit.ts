@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@liveblocks/react/suspense";
 import { LiveMap, LiveObject } from "@liveblocks/client";
 
@@ -20,7 +20,9 @@ import type { CanvasNodeData } from "@/types/canvas";
 // The textarea is uncontrolled: it seeds its `defaultValue` from `data.label`
 // on every edit open. We never mirror `data.label` to a local React state
 // because doing so would lose cross-client edits mid-typing — each keystroke
-// is a CRDT write, and the next open re-reads from storage.
+// is a CRDT write, and the next open re-reads from storage. Because drafts
+// persist per keystroke, cancel (Escape) restores the label captured at
+// edit open so the abandoned draft does not linger in shared storage.
 //
 // Spec: .claude/context/specs/14-node-editing.md
 // ---------------------------------------------------------------------------
@@ -35,6 +37,7 @@ type UseCanvasLabelEditArgs = { nodeId: string };
 
 function useCanvasLabelEdit({ nodeId }: UseCanvasLabelEditArgs) {
   const [isEditing, setIsEditing] = useState(false);
+  const initialRef = useRef("");
 
   // The global `Liveblocks.Storage: {}` interface does not model the canvas
   // graph (the graph is owned by `@liveblocks/react-flow`'s generic hook),
@@ -53,10 +56,16 @@ function useCanvasLabelEdit({ nodeId }: UseCanvasLabelEditArgs) {
     [nodeId],
   );
 
-  const onStartEdit = useCallback(() => setIsEditing(true), []);
+  const onStartEdit = useCallback((initial = "") => {
+    initialRef.current = initial;
+    setIsEditing(true);
+  }, []);
   const onChange = useCallback((next: string) => setLabel(next), [setLabel]);
   const onCommit = useCallback(() => setIsEditing(false), []);
-  const onCancel = useCallback(() => setIsEditing(false), []);
+  const onCancel = useCallback(() => {
+    setLabel(initialRef.current);
+    setIsEditing(false);
+  }, [setLabel]);
 
   return { isEditing, onStartEdit, onChange, onCommit, onCancel };
 }

@@ -148,12 +148,23 @@ function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode>) {
             className="nodrag nopan w-[80%] resize-none bg-transparent text-center text-xs outline-none placeholder:text-copy-muted"
           />
         ) : (
-          <span
-            className={data.label ? "select-none" : "select-none text-copy-muted"}
-            onDoubleClick={onStartEdit}
+          <button
+            type="button"
+            aria-label={data.label ? `Edit label ${data.label}` : "Add label"}
+            className={
+              (data.label ? "select-none" : "select-none text-copy-muted") +
+              " cursor-text bg-transparent p-0 text-center text-xs text-inherit focus-visible:outline-2 focus-visible:outline-offset-1"
+            }
+            onDoubleClick={() => onStartEdit(data.label)}
+            // Keyboard activation (Enter/Space) fires `click` with
+            // `detail === 0`; mouse clicks carry the click count, so this
+            // preserves double-click-to-edit for pointers.
+            onClick={(event) => {
+              if (event.detail === 0) onStartEdit(data.label);
+            }}
           >
             {data.label || "Label"}
-          </span>
+          </button>
         )}
         <Handle
           id="right"
@@ -275,15 +286,24 @@ function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode>) {
             style={{ color: colorPair.text }}
           />
         ) : (
-          <span
+          <button
+            type="button"
+            aria-label={data.label ? `Edit label ${data.label}` : "Add label"}
             className={
-              "max-w-[80%] text-center text-xs select-none " + (data.label ? "" : "text-copy-muted")
+              "max-w-[80%] cursor-text bg-transparent p-0 text-center text-xs select-none focus-visible:outline-2 focus-visible:outline-offset-1 " +
+              (data.label ? "" : "text-copy-muted")
             }
             style={{ color: data.label ? colorPair.text : undefined }}
-            onDoubleClick={onStartEdit}
+            onDoubleClick={() => onStartEdit(data.label)}
+            // Keyboard activation (Enter/Space) fires `click` with
+            // `detail === 0`; mouse clicks carry the click count, so this
+            // preserves double-click-to-edit for pointers.
+            onClick={(event) => {
+              if (event.detail === 0) onStartEdit(data.label);
+            }}
           >
             {data.label || "Label"}
-          </span>
+          </button>
         )}
       </div>
       <Handle
