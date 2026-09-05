@@ -10,11 +10,9 @@ import { SHAPE_DRAG_MIME, type ShapeDefinition } from "@/lib/canvas/shape-defini
 //
 // The shape panel buttons fire a native HTML5 `dragstart` that writes the
 // shape payload to the custom `SHAPE_DRAG_MIME` slot of `dataTransfer`. The
-// browser's default ghost image is hidden here (`event.dataTransfer.setData`
-// alone is enough — the browser stops drawing its native ghost the moment
-// the consumer reads from the dataTransfer and the listener in this hook
-// runs). A custom ghost is rendered by `<ShapeDragPreview />`, which reads
-// the current `{ shape, x, y }` from this hook.
+// native drag ghost is suppressed here via `setDragImage` with a transparent
+// 1x1 canvas so only the custom `<ShapeDragPreview />` ghost is visible.
+// That component reads the current `{ shape, x, y }` from this hook.
 //
 // Why global `document` listeners and not panel-local handlers:
 // - The preview is rendered through a portal at `document.body`, so panel-
@@ -81,6 +79,16 @@ function useShapeDragPreview(): PreviewState {
         return;
       }
       if (!isShapeDefinition(parsed)) return;
+      // Suppress the browser's native drag ghost so only the custom
+      // `<ShapeDragPreview />` follows the cursor. This document-level
+      // listener still runs within the same `dragstart` dispatch as the
+      // panel's source handler, so `setDragImage` takes effect.
+      if (event.dataTransfer && typeof event.dataTransfer.setDragImage === "function") {
+        const blank = document.createElement("canvas");
+        blank.width = 1;
+        blank.height = 1;
+        event.dataTransfer.setDragImage(blank, 0, 0);
+      }
       activeShape = parsed;
       pendingX = event.clientX;
       pendingY = event.clientY;
