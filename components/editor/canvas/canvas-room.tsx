@@ -172,8 +172,8 @@ function CanvasRoom({ roomId, templateFitVersion, children }: CanvasRoomProps) {
           >
             <Canvas templateFitVersion={templateFitVersion} />
           </ClientSideSuspense>
-          {children}
         </ErrorBoundary>
+        {children}
       </RoomProvider>
     </LiveblocksProvider>
   );
