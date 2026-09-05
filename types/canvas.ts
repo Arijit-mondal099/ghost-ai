@@ -62,6 +62,8 @@ export type CanvasNodeData = {
 
 export type CanvasNode = import("@xyflow/react").Node<CanvasNodeData, typeof canvasNode>;
 
-// Edges carry no application data yet — a later spec will add e.g. condition
-// labels. The `Record<string, never>` keeps the data slot honest.
-export type CanvasEdge = import("@xyflow/react").Edge<Record<string, never>, typeof canvasEdge>;
+// Inline edge labels (spec 16). Empty string is the "no label" state — the
+// edge renderer shows a faint "Label" hint on selected edges in that case.
+export type CanvasEdgeData = { label: string };
+
+export type CanvasEdge = import("@xyflow/react").Edge<CanvasEdgeData, typeof canvasEdge>;

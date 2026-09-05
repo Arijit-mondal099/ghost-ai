@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 
+import { useCanvasLabelEdit } from "@/hooks/use-canvas-label-edit";
 import { DEFAULT_NODE_SHAPE, NODE_COLORS, type CanvasNode, type NodeShape } from "@/types/canvas";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +40,11 @@ import { DEFAULT_NODE_SHAPE, NODE_COLORS, type CanvasNode, type NodeShape } from
 // `useLiveblocksFlow` syncs as `width`/`height` to room Storage — no extra
 // wiring needed. Floors in `RESIZE_MIN` keep labels readable; `circle` keeps
 // aspect ratio so it never becomes an ellipse.
+//
+// Label editing: see `useCanvasLabelEdit`. The `isEditing` branch swaps the
+// static <span> for a <textarea> with `className="nodrag nopan"` so React
+// Flow ignores text input gestures. `useEffect` + ref focuses the textarea
+// and selects its current value on open so a single keystroke overwrites it.
 // ---------------------------------------------------------------------------
 
 const CSS_SHAPE_RADIUS: Record<string, string> = {
@@ -61,7 +68,7 @@ const RESIZE_MIN: Record<
   hexagon: { minWidth: 100, minHeight: 60 },
 };
 
-function CanvasNodeComponent({ data, selected }: NodeProps<CanvasNode>) {
+function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode>) {
   const colorPair = NODE_COLORS.find((c) => c.name === data.color) ?? NODE_COLORS[0];
   const shape: NodeShape = data.shape ?? DEFAULT_NODE_SHAPE;
   const borderColor = selected ? "var(--text-primary)" : "var(--border-default)";
@@ -70,6 +77,19 @@ function CanvasNodeComponent({ data, selected }: NodeProps<CanvasNode>) {
     ? "opacity-100 transition-opacity duration-150"
     : "opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:opacity-100";
   const resize = RESIZE_MIN[shape];
+
+  const { isEditing, onStartEdit, onChange, onCommit, onCancel } = useCanvasLabelEdit({
+    nodeId: id,
+  });
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [isEditing]);
 
   // CSS shapes: rectangle / circle / pill — a single bordered div whose
   // border-radius alone defines the silhouette.
@@ -107,7 +127,45 @@ function CanvasNodeComponent({ data, selected }: NodeProps<CanvasNode>) {
           style={handleStyle}
           className={handleClass}
         />
-        <span className="select-none">{data.label}</span>
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            defaultValue={data.label}
+            rows={1}
+            placeholder="Label"
+            onChange={(event) => onChange(event.target.value)}
+            onBlur={onCommit}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onCancel();
+              }
+            }}
+            // `nodrag` stops the node-drag gesture from stealing the mousedown;
+            // `nopan` stops the canvas pan from the same. Both are the
+            // @xyflow/react v12 defaults (see `noDragClassName` /
+            // `noPanClassName` in the package's component props).
+            className="nodrag nopan w-[80%] resize-none bg-transparent text-center text-xs outline-none placeholder:text-copy-muted"
+          />
+        ) : (
+          <button
+            type="button"
+            aria-label={data.label ? `Edit label ${data.label}` : "Add label"}
+            className={
+              (data.label ? "select-none" : "select-none text-copy-muted") +
+              " cursor-text bg-transparent p-0 text-center text-xs text-inherit focus-visible:outline-2 focus-visible:outline-offset-1"
+            }
+            onDoubleClick={() => onStartEdit(data.label)}
+            // Keyboard activation (Enter/Space) fires `click` with
+            // `detail === 0`; mouse clicks carry the click count, so this
+            // preserves double-click-to-edit for pointers.
+            onClick={(event) => {
+              if (event.detail === 0) onStartEdit(data.label);
+            }}
+          >
+            {data.label || "Label"}
+          </button>
+        )}
         <Handle
           id="right"
           type="source"
@@ -209,13 +267,44 @@ function CanvasNodeComponent({ data, selected }: NodeProps<CanvasNode>) {
           />
         </svg>
       )}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span
-          className="max-w-[80%] text-center text-xs select-none"
-          style={{ color: colorPair.text }}
-        >
-          {data.label}
-        </span>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            defaultValue={data.label}
+            rows={1}
+            placeholder="Label"
+            onChange={(event) => onChange(event.target.value)}
+            onBlur={onCommit}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onCancel();
+              }
+            }}
+            className="nodrag nopan w-[80%] max-w-[80%] resize-none bg-transparent text-center text-xs outline-none placeholder:text-copy-muted"
+            style={{ color: colorPair.text }}
+          />
+        ) : (
+          <button
+            type="button"
+            aria-label={data.label ? `Edit label ${data.label}` : "Add label"}
+            className={
+              "max-w-[80%] cursor-text bg-transparent p-0 text-center text-xs select-none focus-visible:outline-2 focus-visible:outline-offset-1 " +
+              (data.label ? "" : "text-copy-muted")
+            }
+            style={{ color: data.label ? colorPair.text : undefined }}
+            onDoubleClick={() => onStartEdit(data.label)}
+            // Keyboard activation (Enter/Space) fires `click` with
+            // `detail === 0`; mouse clicks carry the click count, so this
+            // preserves double-click-to-edit for pointers.
+            onClick={(event) => {
+              if (event.detail === 0) onStartEdit(data.label);
+            }}
+          >
+            {data.label || "Label"}
+          </button>
+        )}
       </div>
       <Handle
         id="top"
