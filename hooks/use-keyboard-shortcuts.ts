@@ -34,7 +34,10 @@ function useKeyboardShortcuts({ reactFlow, onUndo, onRedo }: UseKeyboardShortcut
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      if (target?.closest("input, textarea")) return;
+      // `isContentEditable` covers `contenteditable=""` and
+      // `plaintext-only` too, unlike `[contenteditable="true"]`.
+      if (target?.isContentEditable) return;
 
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
