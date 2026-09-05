@@ -1,4 +1,8 @@
 export { AccessDenied } from "./access-denied";
+export { CanvasEdge, type CanvasEdgeProps } from "./canvas/canvas-edge";
+export { CanvasNode, type CanvasNodeProps } from "./canvas/canvas-node";
+export { CanvasRoom, type CanvasRoomProps } from "./canvas/canvas-room";
+export { ShapePanel } from "./canvas/shape-panel";
 export { CreateProjectDialog, type CreateProjectDialogProps } from "./create-project-dialog";
 export { DeleteProjectDialog, type DeleteProjectDialogProps } from "./delete-project-dialog";
 export { EditorDialog } from "./dialog";

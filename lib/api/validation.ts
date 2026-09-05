@@ -132,3 +132,36 @@ export function parseInviteCollaboratorBody(input: unknown): ParseResult<InviteC
   }
   return { ok: true, value: { email: trimmed } };
 }
+
+// ---------------------------------------------------------------------------
+// Liveblocks auth body. The Liveblocks JS client posts `{ room: "<id>" }` to
+// the auth endpoint (the wire field name is fixed by the SDK), so the parser
+// reads `room` and surfaces it as `roomId` to the route — the route does not
+// need to know about the wire name. No format validation: a CUID-shaped
+// string is required, but the id is opaque to the client and the Prisma
+// lookup will return null for a bad id, which the route surfaces as 403.
+// Trimming + non-emptiness is enough here.
+// ---------------------------------------------------------------------------
+
+export type LiveblocksAuthBody = { roomId: string };
+
+export function parseLiveblocksAuthBody(input: unknown): ParseResult<LiveblocksAuthBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["room"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  if (!("room" in input) || input["room"] === undefined || input["room"] === null) {
+    return invalidBody("INVALID_BODY", "room is required");
+  }
+  const raw = input["room"];
+  if (typeof raw !== "string") {
+    return invalidBody("INVALID_BODY", "room must be a string");
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return invalidBody("INVALID_BODY", "room is required");
+  }
+  return { ok: true, value: { roomId: trimmed } };
+}
