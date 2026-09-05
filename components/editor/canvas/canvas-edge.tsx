@@ -2,6 +2,7 @@
 
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
+import { useCanvasEdgeLabelEdit } from "@/hooks/use-canvas-edge-label-edit";
 import { type CanvasEdge } from "@/types/canvas";
 
 // ---------------------------------------------------------------------------
@@ -20,10 +21,13 @@ import { type CanvasEdge } from "@/types/canvas";
 // cut tight 90° angles through node bodies, and the liveblocks-react-flow
 // re-renders on every drag frame so the line tracks node motion smoothly
 // without any extra wiring.
+//
+// Spec: .claude/context/specs/16-edge-behavior.md
 // ---------------------------------------------------------------------------
 
 function CanvasEdgeComponent({
   id,
+  data,
   sourceX,
   sourceY,
   targetX,
@@ -43,6 +47,13 @@ function CanvasEdgeComponent({
     borderRadius: 16,
   });
 
+  // Hook must run before any conditional returns (rules of hooks).
+  const { isEditing, onStartEdit, onChange, onCommit, onCancel } = useCanvasEdgeLabelEdit({
+    edgeId: id,
+  });
+
+  const label = data?.label ?? "";
+
   return (
     <>
       <BaseEdge
@@ -56,13 +67,55 @@ function CanvasEdgeComponent({
         }}
       />
       <EdgeLabelRenderer>
-        <div
-          style={{
-            position: "absolute",
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            pointerEvents: "none",
-          }}
-        />
+        {selected ? (
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            // `nodrag` stops the node-drag gesture from stealing the mousedown;
+            // `nopan` stops the canvas pan from the same. Both are the
+            // @xyflow/react v12 defaults (see `noDragClassName` /
+            // `noPanClassName` in the package's component props).
+            className="nodrag nopan"
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            {isEditing ? (
+              <input
+                autoFocus
+                defaultValue={label}
+                size={Math.max(label.length, 4) || 4}
+                onChange={(event) => onChange(event.target.value)}
+                onBlur={onCommit}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === "Escape") {
+                    event.preventDefault();
+                    if (event.key === "Escape") onCancel();
+                    else onCommit();
+                  }
+                }}
+                className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-center text-xs text-copy-primary outline-none focus:border-accent-primary"
+              />
+            ) : label ? (
+              <button
+                type="button"
+                onDoubleClick={onStartEdit}
+                className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-secondary"
+              >
+                {label}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onDoubleClick={onStartEdit}
+                className="rounded-md border border-dashed border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-muted"
+              >
+                Label
+              </button>
+            )}
+          </div>
+        ) : null}
       </EdgeLabelRenderer>
     </>
   );
