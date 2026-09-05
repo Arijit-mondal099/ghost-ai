@@ -10,8 +10,11 @@ import type { CanvasEdgeData } from "@/types/canvas";
 // Inline label editor for a single canvas edge.
 //
 // Identical storage path to `useCanvasLabelEdit`, but writes to the edges
-// LiveMap. Keeps label editing as a per-edge, per-keystroke CRDT write so
-// every collaborator sees the same label without a custom sync config.
+// LiveMap. Edits stay in local `draft` state while typing and submit as a
+// single Liveblocks mutation on commit (blur / Enter), so one label edit is
+// one undo step and generates one storage event instead of one per
+// keystroke. Cancel (Escape) discards the draft — storage is untouched, so
+// the original label is restored by construction.
 //
 // Spec: .claude/context/specs/16-edge-behavior.md
 // ---------------------------------------------------------------------------
@@ -26,6 +29,7 @@ type UseCanvasEdgeLabelEditArgs = { edgeId: string };
 
 function useCanvasEdgeLabelEdit({ edgeId }: UseCanvasEdgeLabelEditArgs) {
   const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
 
   // The global `Liveblocks.Storage: {}` interface does not model the canvas
   // graph (the graph is owned by `@liveblocks/react-flow`'s generic hook),
@@ -44,12 +48,18 @@ function useCanvasEdgeLabelEdit({ edgeId }: UseCanvasEdgeLabelEditArgs) {
     [edgeId],
   );
 
-  const onStartEdit = useCallback(() => setIsEditing(true), []);
-  const onChange = useCallback((next: string) => setLabel(next), [setLabel]);
-  const onCommit = useCallback(() => setIsEditing(false), []);
+  const onStartEdit = useCallback((initial = "") => {
+    setDraft(initial);
+    setIsEditing(true);
+  }, []);
+  const onChange = useCallback((next: string) => setDraft(next), []);
+  const onCommit = useCallback(() => {
+    setLabel(draft);
+    setIsEditing(false);
+  }, [draft, setLabel]);
   const onCancel = useCallback(() => setIsEditing(false), []);
 
-  return { isEditing, onStartEdit, onChange, onCommit, onCancel };
+  return { isEditing, draft, onStartEdit, onChange, onCommit, onCancel };
 }
 
 export { useCanvasEdgeLabelEdit };

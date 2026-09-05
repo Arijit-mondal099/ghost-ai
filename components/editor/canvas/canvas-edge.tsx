@@ -48,7 +48,7 @@ function CanvasEdgeComponent({
   });
 
   // Hook must run before any conditional returns (rules of hooks).
-  const { isEditing, onStartEdit, onChange, onCommit, onCancel } = useCanvasEdgeLabelEdit({
+  const { isEditing, draft, onStartEdit, onChange, onCommit, onCancel } = useCanvasEdgeLabelEdit({
     edgeId: id,
   });
 
@@ -67,12 +67,14 @@ function CanvasEdgeComponent({
         }}
       />
       <EdgeLabelRenderer>
-        {selected ? (
+        {/* Saved labels stay visible as pill badges even when the edge is
+            not selected (spec 16); the empty-label hint is selected-only. */}
+        {label || selected ? (
           <div
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: "all",
+              pointerEvents: label && !selected ? "none" : "all",
             }}
             // `nodrag` stops the node-drag gesture from stealing the mousedown;
             // `nopan` stops the canvas pan from the same. Both are the
@@ -84,8 +86,8 @@ function CanvasEdgeComponent({
             {isEditing ? (
               <input
                 autoFocus
-                defaultValue={label}
-                size={Math.max(label.length, 4) || 4}
+                value={draft}
+                size={Math.max(draft.length, 4) || 4}
                 onChange={(event) => onChange(event.target.value)}
                 onBlur={onCommit}
                 onKeyDown={(event) => {
@@ -98,17 +100,23 @@ function CanvasEdgeComponent({
                 className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-center text-xs text-copy-primary outline-none focus:border-accent-primary"
               />
             ) : label ? (
-              <button
-                type="button"
-                onDoubleClick={onStartEdit}
-                className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-secondary"
-              >
-                {label}
-              </button>
+              selected ? (
+                <button
+                  type="button"
+                  onDoubleClick={() => onStartEdit(label)}
+                  className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-secondary"
+                >
+                  {label}
+                </button>
+              ) : (
+                <span className="rounded-md border border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-secondary">
+                  {label}
+                </span>
+              )
             ) : (
               <button
                 type="button"
-                onDoubleClick={onStartEdit}
+                onDoubleClick={() => onStartEdit(label)}
                 className="rounded-md border border-dashed border-surface-border bg-base px-1.5 py-0.5 text-xs text-copy-muted"
               >
                 Label
