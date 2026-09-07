@@ -11,7 +11,8 @@ import { authAppearance } from "@/lib/auth-appearance";
 // Top navbar for every editor screen. The home page mounts it with no
 // `center` or `rightActions`; the workspace page passes the project name
 // (center) plus share and AI-sidebar toggles (right of the user button's
-// flex group). The far-right `UserButton` stays put in both contexts.
+// flex group). The far-right `UserButton` renders unless `showUserButton`
+// is false (the room navbar hides it).
 // ---------------------------------------------------------------------------
 
 type EditorNavbarProps = {
@@ -19,9 +20,16 @@ type EditorNavbarProps = {
   onToggle: () => void;
   center?: ReactNode;
   rightActions?: ReactNode;
+  showUserButton?: boolean;
 };
 
-function EditorNavbar({ isOpen, onToggle, center, rightActions }: EditorNavbarProps) {
+function EditorNavbar({
+  isOpen,
+  onToggle,
+  center,
+  rightActions,
+  showUserButton = true,
+}: EditorNavbarProps) {
   return (
     <header className="relative z-50 flex h-14 w-full items-center justify-between border-b border-surface-border bg-base px-4">
       <div className="flex flex-1 items-center gap-2">
@@ -43,7 +51,12 @@ function EditorNavbar({ isOpen, onToggle, center, rightActions }: EditorNavbarPr
       </div>
       <div className="flex flex-1 items-center justify-end gap-2">
         {rightActions}
-        <UserButton appearance={authAppearance} userProfileProps={{ appearance: authAppearance }} />
+        {showUserButton ? (
+          <UserButton
+            appearance={authAppearance}
+            userProfileProps={{ appearance: authAppearance }}
+          />
+        ) : null}
       </div>
     </header>
   );
