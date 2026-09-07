@@ -95,14 +95,14 @@ function useCanvasDrop() {
         return;
       }
 
-      const { x: screenX, y: screenY } = screenToFlowPosition({
+      // The node uses `origin: [0.5, 0.5]` (see below), so `position` already
+      // refers to the node's center — use the drop point as-is. Subtracting
+      // half the dimensions here would double-offset the node up-left of the
+      // cursor.
+      const { x, y } = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
-
-      // Center the node on the cursor (matches the Figma / Sketch feel).
-      const x = screenX - payload.width / 2;
-      const y = screenY - payload.height / 2;
 
       const data: CanvasNodeData = {
         label: "",
