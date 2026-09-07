@@ -15,6 +15,7 @@ import { ClientSideSuspense } from "@liveblocks/react/suspense";
 import { LiveblocksProvider, RoomProvider } from "@liveblocks/react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 
+import { useCallback, useRef } from "react";
 import { TrashIcon } from "lucide-react";
 
 import { CanvasColorToolbar } from "@/components/editor/canvas/canvas-color-toolbar";
@@ -22,10 +23,15 @@ import { CanvasControlBar } from "@/components/editor/canvas/canvas-control-bar"
 import { CanvasEdge as CanvasEdgeRenderer } from "@/components/editor/canvas/canvas-edge";
 import { CanvasNode as CanvasNodeRenderer } from "@/components/editor/canvas/canvas-node";
 import { CanvasTemplateFitOnLoad } from "@/components/editor/canvas/canvas-template-fit-on-load";
+import { LiveCursors } from "@/components/editor/canvas/live-cursors";
+import { PresenceAvatars } from "@/components/editor/canvas/presence-avatars";
 import { ShapeDragPreview } from "@/components/editor/canvas/shape-drag-preview";
 import { ShapePanel } from "@/components/editor/canvas/shape-panel";
 import { useCanvasDelete } from "@/hooks/use-canvas-delete";
 import { useCanvasDrop } from "@/hooks/use-canvas-drop";
+import { useCanvasAutosave, type CanvasSaveStatus } from "@/hooks/use-canvas-autosave";
+import { useCanvasRestore } from "@/hooks/use-canvas-restore";
+import { usePresenceCursor } from "@/hooks/use-presence-cursor";
 import { canvasEdge, canvasNode, type CanvasEdge, type CanvasNode } from "@/types/canvas";
 
 // ---------------------------------------------------------------------------
@@ -57,6 +63,18 @@ type CanvasRoomProps = {
    * pass this prop pays zero cost.
    */
   templateFitVersion?: number;
+  /**
+   * Bumped by the workspace client when the navbar Save button is clicked.
+   * The in-canvas autosave hook flushes immediately, bypassing debounce.
+   * Optional so existing hosts render unchanged.
+   */
+  saveRequestVersion?: number;
+  /**
+   * Receives autosave status updates (`saving` / `saved` / `error`) from the
+   * in-canvas hook. The navbar Save button lives outside `RoomProvider` where
+   * the graph is unavailable, so status travels up through this callback.
+   */
+  onSaveStatusChange?: (status: CanvasSaveStatus) => void;
   /**
    * Optional sibling rendered inside `<RoomProvider>` so any dialogs that
    * call Liveblocks hooks (e.g. `useMutation`) resolve the room context.
@@ -90,18 +108,66 @@ const edgeTypes = { [canvasEdge]: CanvasEdgeRenderer } as const;
 // the inner component lets us call the hook *inside* the provider without
 // affecting the outer `<Canvas />` lifecycle or the `useLiveblocksFlow`
 // suspense boundary.
-function CanvasSurface({ templateFitVersion }: { templateFitVersion?: number }) {
+function CanvasSurface({
+  projectId,
+  templateFitVersion,
+  saveRequestVersion,
+  restoreGuard,
+  onSaveStatusChange,
+}: {
+  projectId: string;
+  templateFitVersion?: number;
+  saveRequestVersion: number;
+  restoreGuard: React.MutableRefObject<boolean>;
+  onSaveStatusChange?: (status: CanvasSaveStatus) => void;
+}) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onDelete } = useLiveblocksFlow<
     CanvasNode,
     CanvasEdge
   >({ suspense: true });
   const drop = useCanvasDrop();
+  const presence = usePresenceCursor();
   const { selectedCount, deleteSelected, onSelectionChange } = useCanvasDelete({
     onDelete,
   });
+  // Local-interaction clock for the autosave idle gate. A ref (not state) so
+  // signaling activity never re-renders the canvas. Bumped on press, on
+  // button-held pointer moves (drags: move, resize, connect), and on key
+  // presses (label editing, shortcuts) — all bubble up to the wrapper div.
+  // Plain hover is intentionally excluded: just reading the canvas must not
+  // hold off autosave.
+  const lastActivityAt = useRef(0);
+  const signalActivity = useCallback(() => {
+    lastActivityAt.current = Date.now();
+  }, []);
+  const onActivityPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.buttons !== 0) signalActivity();
+    },
+    [signalActivity],
+  );
+  useCanvasAutosave({
+    projectId,
+    nodes,
+    edges,
+    saveRequestVersion,
+    restoreGuard,
+    lastActivityAt,
+    onStatusChange: onSaveStatusChange,
+  });
+  useCanvasRestore({ projectId, nodes, edges, restoreGuard });
 
   return (
-    <div className="relative h-full w-full" onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
+    <div
+      className="relative h-full w-full"
+      onDragOver={drop.onDragOver}
+      onDrop={drop.onDrop}
+      onMouseMove={presence.onMouseMove}
+      onMouseLeave={presence.onMouseLeave}
+      onPointerDown={signalActivity}
+      onPointerMove={onActivityPointerMove}
+      onKeyDown={signalActivity}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -139,10 +205,12 @@ function CanvasSurface({ templateFitVersion }: { templateFitVersion?: number }) 
           </button>
         </div>
       )}
+      <LiveCursors />
       <ShapePanel />
       <ShapeDragPreview />
       <CanvasColorToolbar />
       <CanvasControlBar />
+      <PresenceAvatars />
       {templateFitVersion !== undefined ? (
         <CanvasTemplateFitOnLoad version={templateFitVersion} />
       ) : null}
@@ -150,15 +218,43 @@ function CanvasSurface({ templateFitVersion }: { templateFitVersion?: number }) 
   );
 }
 
-function Canvas({ templateFitVersion }: { templateFitVersion?: number }) {
+function Canvas({
+  projectId,
+  templateFitVersion,
+  saveRequestVersion,
+  restoreGuard,
+  onSaveStatusChange,
+}: {
+  projectId: string;
+  templateFitVersion?: number;
+  saveRequestVersion: number;
+  restoreGuard: React.MutableRefObject<boolean>;
+  onSaveStatusChange?: (status: CanvasSaveStatus) => void;
+}) {
   return (
     <ReactFlowProvider>
-      <CanvasSurface templateFitVersion={templateFitVersion} />
+      <CanvasSurface
+        projectId={projectId}
+        templateFitVersion={templateFitVersion}
+        saveRequestVersion={saveRequestVersion}
+        restoreGuard={restoreGuard}
+        onSaveStatusChange={onSaveStatusChange}
+      />
     </ReactFlowProvider>
   );
 }
 
-function CanvasRoom({ roomId, templateFitVersion, children }: CanvasRoomProps) {
+function CanvasRoom({
+  roomId,
+  templateFitVersion,
+  saveRequestVersion,
+  onSaveStatusChange,
+  children,
+}: CanvasRoomProps) {
+  // Skips one autosave cycle after a restore so the freshly-loaded graph is
+  // not echoed straight back to Blob. Created here (outside suspense) so the
+  // ref identity is stable across storage reconnects.
+  const restoreGuard = useRef(false);
   return (
     <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
       <RoomProvider id={roomId} initialPresence={{ cursor: null, isThinking: false }}>
@@ -170,7 +266,13 @@ function CanvasRoom({ roomId, templateFitVersion, children }: CanvasRoomProps) {
               </div>
             }
           >
-            <Canvas templateFitVersion={templateFitVersion} />
+            <Canvas
+              projectId={roomId}
+              templateFitVersion={templateFitVersion}
+              saveRequestVersion={saveRequestVersion ?? 0}
+              restoreGuard={restoreGuard}
+              onSaveStatusChange={onSaveStatusChange}
+            />
           </ClientSideSuspense>
         </ErrorBoundary>
         {children}
