@@ -27,3 +27,10 @@ Update `.claude/context/progress-tracker.md` after each meaningful implementatio
 - Keep spec and plan numbers in sync; do not implement without a stored plan.
 
 If implementation changes the architecture, scope, or standards documented in the context files, update the relevant file before continuing.
+
+<!-- TRIGGER.DEV SKILLS START -->
+
+## Trigger.dev agent skills
+
+This project has Trigger.dev agent skills installed in `.agents/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`, `trigger-authoring-tasks`, `trigger-chat-agent-advanced`, `trigger-cost-savings`, `trigger-getting-started`, `trigger-realtime-and-frontend`.
+<!-- TRIGGER.DEV SKILLS END -->
