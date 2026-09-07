@@ -15,7 +15,10 @@ import type { CanvasEdge, CanvasNode } from "@/types/canvas";
 // delete propagates to all connected clients. Deleting nodes also removes
 // their connected edges, so selected + connected edges are deleted together.
 //
-// Keyboard: Backspace/Delete (skipped inside inputs / contentEditable).
+// Keyboard: Backspace/Delete, or Ctrl/Cmd+D (skipped inside inputs /
+// contentEditable; preventDefault on Ctrl/Cmd+D blocks the browser bookmark
+// dialog). Multi-select (Shift+click, Shift+drag marquee) deletes every
+// selected node and edge in one `onDelete` call.
 // Button: `selectedCount` / `deleteSelected` drive a floating delete UI.
 // ---------------------------------------------------------------------------
 
@@ -52,9 +55,21 @@ function useCanvasDelete({ onDelete }: UseCanvasDeleteArgs) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Backspace" && event.key !== "Delete") return;
+      const mod = event.metaKey || event.ctrlKey;
+      const isDeleteKey = event.key === "Backspace" || event.key === "Delete";
+      // Ctrl/Cmd+D deletes the selection — exact chord only, so
+      // Ctrl+Shift+D (bookmark all tabs) and Ctrl+Alt+D keep working.
+      // preventDefault (below, on success) blocks the browser bookmark
+      // dialog — but only when a selection was actually deleted, so an
+      // empty canvas keeps the native bookmark.
+      const isModD = mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "d";
+      if (!isDeleteKey && !isModD) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      // Ctrl/Cmd+D is scoped to the canvas surface: with items selected,
+      // the chord must not delete while focus sits in the AI sidebar or
+      // another editor control outside the canvas.
+      if (isModD && !target?.closest("[data-canvas-surface]")) return;
       if (deleteSelected()) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);

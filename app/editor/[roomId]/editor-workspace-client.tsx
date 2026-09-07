@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { LayoutTemplateIcon, Share2Icon, SparklesIcon, XIcon } from "lucide-react";
+import { LayoutTemplateIcon, Share2Icon, SparklesIcon } from "lucide-react";
 
 import {
+  AISidebar,
   CanvasRoom,
+  CanvasSaveButton,
   CreateProjectDialog,
   DeleteProjectDialog,
   EditorNavbar,
@@ -17,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import { useShareDialog } from "@/hooks/use-share-dialog";
+import { type CanvasSaveStatus } from "@/hooks/use-canvas-autosave";
 import type { Project } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +53,12 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
   // trigger (`CanvasTemplateFitOnLoad`) can fire `fitView()` once the new
   // nodes/edges are in storage.
   const [templateFitVersion, setTemplateFitVersion] = useState(0);
+  // Autosave status reported up from the in-canvas hook (spec 21); the
+  // navbar Save button lives outside `RoomProvider` where the graph is
+  // unavailable, so status travels via callback and manual saves via a
+  // version counter the hook watches.
+  const [saveStatus, setSaveStatus] = useState<CanvasSaveStatus>("idle");
+  const [saveRequestVersion, setSaveRequestVersion] = useState(0);
   const { user } = useUser();
   const dialogs = useProjectActions(projects);
   const share = useShareDialog({ projectId: project.id });
@@ -69,8 +78,13 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen((open) => !open)}
         center={project.name}
+        showUserButton={false}
         rightActions={
           <>
+            <CanvasSaveButton
+              status={saveStatus}
+              onSave={() => setSaveRequestVersion((v) => v + 1)}
+            />
             <Button variant="outline" size="sm" onClick={share.open} aria-label="Share project">
               <Share2Icon />
               Share
@@ -86,13 +100,14 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="outline"
+              size="sm"
               onClick={() => setIsAiSidebarOpen((open) => !open)}
               aria-label={isAiSidebarOpen ? "Close AI sidebar" : "Open AI sidebar"}
               aria-expanded={isAiSidebarOpen}
             >
               <SparklesIcon />
+              AI
             </Button>
           </>
         }
@@ -115,7 +130,12 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
           isAiSidebarOpen ? "pr-80" : "pr-0",
         )}
       >
-        <CanvasRoom roomId={project.id} templateFitVersion={templateFitVersion}>
+        <CanvasRoom
+          roomId={project.id}
+          templateFitVersion={templateFitVersion}
+          saveRequestVersion={saveRequestVersion}
+          onSaveStatusChange={setSaveStatus}
+        >
           {/* Rendered inside <RoomProvider> so `useMutation` inside
               `useCanvasTemplateLoad` resolves the room context. The Radix
               Dialog portal keeps the visual position unchanged. */}
@@ -127,29 +147,7 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
         </CanvasRoom>
       </main>
 
-      <aside
-        inert={!isAiSidebarOpen}
-        aria-hidden={!isAiSidebarOpen}
-        className={cn(
-          "fixed right-0 top-14 bottom-0 z-40 flex w-80 flex-col border-l border-surface-border bg-base/95 backdrop-blur-md transition-transform duration-200",
-          isAiSidebarOpen ? "translate-x-0" : "translate-x-full",
-        )}
-      >
-        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-          <span className="text-sm font-medium text-copy-primary">AI</span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setIsAiSidebarOpen(false)}
-            aria-label="Close AI sidebar"
-          >
-            <XIcon />
-          </Button>
-        </div>
-        <div className="flex flex-1 items-center justify-center px-6">
-          <p className="text-sm text-copy-muted">AI chat coming soon.</p>
-        </div>
-      </aside>
+      <AISidebar isOpen={isAiSidebarOpen} onClose={() => setIsAiSidebarOpen(false)} />
 
       <CreateProjectDialog
         open={dialogs.isCreateOpen}

@@ -165,3 +165,41 @@ export function parseLiveblocksAuthBody(input: unknown): ParseResult<LiveblocksA
   }
   return { ok: true, value: { roomId: trimmed } };
 }
+
+// ---------------------------------------------------------------------------
+// Canvas save body (spec 21). The graph schema stays owned by
+// `types/canvas.ts` — the API only checks the envelope: two arrays of plain
+// objects with string ids, plus a total size guard. Node/edge internals are
+// opaque here so canvas-side schema evolution does not require API changes.
+// ---------------------------------------------------------------------------
+
+export type CanvasSaveBody = { nodes: unknown[]; edges: unknown[] };
+
+const CANVAS_MAX_BYTES = 5 * 1024 * 1024;
+
+function isIdRecord(value: unknown): boolean {
+  return isPlainObject(value) && typeof value["id"] === "string";
+}
+
+export function parseCanvasSaveBody(input: unknown): ParseResult<CanvasSaveBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["nodes", "edges"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const { nodes, edges } = input;
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+    return invalidBody("INVALID_BODY", "nodes and edges must be arrays");
+  }
+  if (!nodes.every(isIdRecord) || !edges.every(isIdRecord)) {
+    return invalidBody("INVALID_BODY", "every node and edge must be an object with a string id");
+  }
+  // Measure UTF-8 bytes, not UTF-16 code units: multibyte label text would
+  // otherwise pass the check while exceeding the limit on the wire.
+  const byteLength = new TextEncoder().encode(JSON.stringify(input)).byteLength;
+  if (byteLength > CANVAS_MAX_BYTES) {
+    return invalidBody("CANVAS_TOO_LARGE", "Canvas payload exceeds the 5 MB limit");
+  }
+  return { ok: true, value: { nodes, edges } };
+}
