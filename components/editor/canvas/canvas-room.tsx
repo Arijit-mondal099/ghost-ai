@@ -130,6 +130,11 @@ function CanvasSurface({
   const { selectedCount, deleteSelected, onSelectionChange } = useCanvasDelete({
     onDelete,
   });
+  // Restore-settle flag shared by the autosave + restore sibling hooks.
+  // Starts false (restore in flight on mount) so manual saves queue and
+  // empty-graph auto-saves wait instead of persisting pre-restore content
+  // over the saved canvas. The restore hook sets it on every exit path.
+  const restoreSettled = useRef(false);
   // Local-interaction clock for the autosave idle gate. A ref (not state) so
   // signaling activity never re-renders the canvas. Bumped on press, on
   // button-held pointer moves (drags: move, resize, connect), and on key
@@ -153,13 +158,15 @@ function CanvasSurface({
     saveRequestVersion,
     restoreGuard,
     lastActivityAt,
+    restoreSettled,
     onStatusChange: onSaveStatusChange,
   });
-  useCanvasRestore({ projectId, nodes, edges, restoreGuard });
+  useCanvasRestore({ projectId, nodes, edges, restoreGuard, restoreSettled });
 
   return (
     <div
       className="relative h-full w-full"
+      data-canvas-surface
       onDragOver={drop.onDragOver}
       onDrop={drop.onDrop}
       onMouseMove={presence.onMouseMove}

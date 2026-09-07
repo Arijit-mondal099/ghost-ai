@@ -46,6 +46,10 @@ function ChatInput({ onSend, disabled }: ChatInputProps) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Skip submission while an IME composition is active — Enter confirms
+    // the composition, not the message. Covers browsers reporting the state
+    // via `isComposing` and the legacy 229 keyCode fallback.
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();

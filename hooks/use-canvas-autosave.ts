@@ -32,6 +32,8 @@ const AUTOSAVE_DEBOUNCE_MS = 2500;
 // label input). The idle gate below re-arms the timer until the user stops
 // interacting, so PUTs only fire when the workspace is actually at rest.
 const USER_IDLE_MS = 3000;
+// Poll interval while waiting for the sibling restore hook to settle.
+const RESTORE_SETTLE_POLL_MS = 200;
 
 type StrippedNode = {
   id: string;
@@ -86,6 +88,14 @@ type UseCanvasAutosaveArgs = {
    * idle.
    */
   lastActivityAt: MutableRefObject<number>;
+  /**
+   * False until the sibling restore hook settles (loaded, 404, skipped, or
+   * failed — every exit path sets it). Owned by `CanvasSurface`, shared by
+   * ref. While unset, manual saves queue instead of firing and empty-graph
+   * auto-saves wait: firing either against a possibly-empty graph could PUT
+   * emptiness over the saved canvas before the restore GET lands.
+   */
+  restoreSettled: MutableRefObject<boolean>;
   onStatusChange?: (status: CanvasSaveStatus) => void;
 };
 
@@ -96,6 +106,7 @@ function useCanvasAutosave({
   saveRequestVersion,
   restoreGuard,
   lastActivityAt,
+  restoreSettled,
   onStatusChange,
 }: UseCanvasAutosaveArgs): { status: CanvasSaveStatus; saveNow: () => void } {
   const [status, setStatus] = useState<CanvasSaveStatus>("idle");
@@ -108,7 +119,12 @@ function useCanvasAutosave({
     [nodes, edges],
   );
   const latest = useRef({ nodes, edges, snapshot });
-  latest.current = { nodes, edges, snapshot };
+  // Sync post-commit, not during render: under concurrent rendering React
+  // may discard a render, and a render-phase write would leave a discarded
+  // graph in the ref for the debounce/manual-save callbacks to persist.
+  useEffect(() => {
+    latest.current = { nodes, edges, snapshot };
+  }, [nodes, edges, snapshot]);
   const mounted = useRef(false);
   const lastManualVersion = useRef(saveRequestVersion);
   const lastSavedSnapshot = useRef<string | null>(null);
@@ -188,7 +204,10 @@ function useCanvasAutosave({
       return;
     }
     if (snapshot === lastSavedSnapshot.current) return;
-    if (nodes.length === 0 && edges.length === 0) return;
+    // No empty-graph skip: deleting the final node/edge must persist the
+    // empty canvas, or a later empty-room restore would resurrect the deleted
+    // graph from Blob. The mount guard (first run) and the restore guard
+    // already prevent unwanted empty-state writes on load.
     let id = 0;
     const tick = () => {
       const quietFor = Date.now() - lastActivityAt.current;
@@ -196,18 +215,39 @@ function useCanvasAutosave({
         id = window.setTimeout(tick, USER_IDLE_MS - quietFor);
         return;
       }
+      // While the initial restore is still in flight, an empty graph may
+      // just mean "not loaded yet" — wait for the settle flag rather than
+      // persisting emptiness over the saved canvas. Non-empty content is
+      // genuine user/collaborator work and saves normally.
+      const { nodes: tickNodes, edges: tickEdges } = latest.current;
+      if (!restoreSettled.current && tickNodes.length === 0 && tickEdges.length === 0) {
+        id = window.setTimeout(tick, RESTORE_SETTLE_POLL_MS);
+        return;
+      }
       void saveNow();
     };
     id = window.setTimeout(tick, AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [snapshot, nodes.length, edges.length, saveNow, restoreGuard, lastActivityAt]);
+  }, [snapshot, nodes.length, edges.length, saveNow, restoreGuard, lastActivityAt, restoreSettled]);
 
-  // Manual save requests from the navbar button.
+  // Manual save requests from the navbar button. While the initial restore
+  // is pending the request queues: firing immediately could PUT the
+  // pre-restore (possibly empty) graph over the saved canvas.
   useEffect(() => {
     if (lastManualVersion.current === saveRequestVersion) return;
     lastManualVersion.current = saveRequestVersion;
-    void saveNow();
-  }, [saveRequestVersion, saveNow]);
+    if (restoreSettled.current) {
+      void saveNow();
+      return;
+    }
+    const id = window.setInterval(() => {
+      if (restoreSettled.current) {
+        window.clearInterval(id);
+        void saveNow();
+      }
+    }, RESTORE_SETTLE_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [saveRequestVersion, saveNow, restoreSettled]);
 
   const saveNowManual = useCallback(() => {
     void saveNow();

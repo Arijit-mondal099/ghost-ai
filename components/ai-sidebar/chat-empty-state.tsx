@@ -38,10 +38,10 @@ function ChatEmptyState({ onSelect }: ChatEmptyStateProps) {
           <SparklesIcon className="h-5 w-5 text-brand" />
         </span>
         <p className="mt-4 text-sm font-medium text-copy-primary">
-          Describe the system, Ghost drafts it
+          Describe the system to start the draft
         </p>
         <p className="mt-1 text-xs leading-relaxed text-copy-muted">
-          Pick a starter draft or write your own — it lands on the canvas.
+          Pick a starter draft or write your own to begin.
         </p>
       </div>
       <div className="mt-4">

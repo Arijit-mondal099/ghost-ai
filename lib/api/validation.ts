@@ -195,7 +195,10 @@ export function parseCanvasSaveBody(input: unknown): ParseResult<CanvasSaveBody>
   if (!nodes.every(isIdRecord) || !edges.every(isIdRecord)) {
     return invalidBody("INVALID_BODY", "every node and edge must be an object with a string id");
   }
-  if (JSON.stringify(input).length > CANVAS_MAX_BYTES) {
+  // Measure UTF-8 bytes, not UTF-16 code units: multibyte label text would
+  // otherwise pass the check while exceeding the limit on the wire.
+  const byteLength = new TextEncoder().encode(JSON.stringify(input)).byteLength;
+  if (byteLength > CANVAS_MAX_BYTES) {
     return invalidBody("CANVAS_TOO_LARGE", "Canvas payload exceeds the 5 MB limit");
   }
   return { ok: true, value: { nodes, edges } };

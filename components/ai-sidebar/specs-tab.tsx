@@ -5,16 +5,22 @@ import { DownloadIcon, FileTextIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // ---------------------------------------------------------------------------
-// Specs tab: a solid indigo Generate action over spec document cards. Each
-// card carries a mono format line (format · revision) — the instrument
-// readout voice — so specs read as drafted artifacts, not list rows.
+// Specs tab: Generate action over spec document cards. Generation is not
+// wired yet (spec 20 is UI shell only), so the button is disabled with an
+// explicit label. Each card carries a mono format line (format · revision) —
+// the instrument readout voice — so specs read as drafted artifacts.
 // ---------------------------------------------------------------------------
 
 function SpecsTab() {
   return (
     <div className="flex h-full flex-1 flex-col gap-4 p-4">
-      <Button variant="default" className="w-full rounded-xl py-2.5 font-medium">
-        Generate Spec
+      <Button
+        variant="default"
+        disabled
+        aria-label="Generate spec (coming soon)"
+        className="w-full rounded-xl py-2.5 font-medium"
+      >
+        Generate Spec (coming soon)
       </Button>
 
       <div className="flex flex-1 flex-col gap-3">

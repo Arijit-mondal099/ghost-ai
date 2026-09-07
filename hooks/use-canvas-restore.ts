@@ -36,6 +36,13 @@ type UseCanvasRestoreArgs = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   restoreGuard: MutableRefObject<boolean>;
+  /**
+   * Shared with the sibling autosave hook (owned by `CanvasSurface`). Set to
+   * true on EVERY exit path — content found, fresh project, skipped, failed,
+   * or cancelled — so queued manual saves and empty-graph auto-saves blocked
+   * on it always release.
+   */
+  restoreSettled: MutableRefObject<boolean>;
 };
 
 function isRestorePayload(value: unknown): value is RestorePayload {
@@ -44,7 +51,13 @@ function isRestorePayload(value: unknown): value is RestorePayload {
   return Array.isArray(candidate.nodes) && Array.isArray(candidate.edges);
 }
 
-function useCanvasRestore({ projectId, nodes, edges, restoreGuard }: UseCanvasRestoreArgs) {
+function useCanvasRestore({
+  projectId,
+  nodes,
+  edges,
+  restoreGuard,
+  restoreSettled,
+}: UseCanvasRestoreArgs) {
   const ran = useRef(false);
   const reactFlow = useReactFlow();
 
@@ -55,6 +68,12 @@ function useCanvasRestore({ projectId, nodes, edges, restoreGuard }: UseCanvasRe
     const flow = storage.get("flow" as never) as unknown as LiveObject<CanvasFlowLive>;
     const liveNodes = flow.get("nodes");
     const liveEdges = flow.get("edges");
+
+    // Re-check inside the mutation: the pre-fetch emptiness check can go
+    // stale if a collaborator writes between the fetch and this batch.
+    // Never clear a room that gained content — report back so the caller
+    // skips the guard and the fit.
+    if (liveNodes.size > 0 || liveEdges.size > 0) return false;
 
     for (const key of Array.from(liveNodes.keys())) liveNodes.delete(key);
     for (const key of Array.from(liveEdges.keys())) liveEdges.delete(key);
@@ -67,6 +86,7 @@ function useCanvasRestore({ projectId, nodes, edges, restoreGuard }: UseCanvasRe
       const live = LiveObject.from(edge as unknown as Parameters<typeof LiveObject.from>[0]);
       liveEdges.set(edge.id, live as unknown as LiveObject<LsonNodeRecord>);
     }
+    return true;
   }, []);
 
   useEffect(() => {
@@ -74,29 +94,57 @@ function useCanvasRestore({ projectId, nodes, edges, restoreGuard }: UseCanvasRe
     ran.current = true;
 
     // Room already has content — never overwrite active collaboration.
-    if (nodes.length > 0 || edges.length > 0) return;
+    if (nodes.length > 0 || edges.length > 0) {
+      restoreSettled.current = true;
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
+      // Settle helper: every exit below releases saves blocked on the flag.
+      const settle = () => {
+        restoreSettled.current = true;
+      };
       let res: Response;
       try {
         res = await fetch(`/api/projects/${projectId}/canvas`, { cache: "no-store" });
       } catch {
+        settle();
         return;
       }
       // Fresh project with nothing saved yet.
-      if (res.status === 404) return;
-      if (!res.ok) return;
+      if (res.status === 404) {
+        settle();
+        return;
+      }
+      if (!res.ok) {
+        settle();
+        return;
+      }
       let saved: unknown;
       try {
         saved = await res.json();
       } catch {
+        settle();
         return;
       }
-      if (cancelled || !isRestorePayload(saved)) return;
-      if (saved.nodes.length === 0 && saved.edges.length === 0) return;
+      if (cancelled || !isRestorePayload(saved)) {
+        settle();
+        return;
+      }
+      if (saved.nodes.length === 0 && saved.edges.length === 0) {
+        settle();
+        return;
+      }
+      const restored = replace({ nodes: saved.nodes, edges: saved.edges });
+      // The mutation re-checks emptiness atomically; only claim the restore
+      // (guard + fit) when it actually wrote.
+      if (cancelled || !restored) {
+        settle();
+        return;
+      }
       restoreGuard.current = true;
-      replace({ nodes: saved.nodes, edges: saved.edges });
+      settle();
       window.requestAnimationFrame(() => {
         if (!cancelled) reactFlow.fitView({ duration: 200, padding: 0.1 });
       });
@@ -105,7 +153,7 @@ function useCanvasRestore({ projectId, nodes, edges, restoreGuard }: UseCanvasRe
     return () => {
       cancelled = true;
     };
-  }, [projectId, nodes.length, edges.length, replace, reactFlow, restoreGuard]);
+  }, [projectId, nodes.length, edges.length, replace, reactFlow, restoreGuard, restoreSettled]);
 }
 
 export { useCanvasRestore };

@@ -57,13 +57,19 @@ function useCanvasDelete({ onDelete }: UseCanvasDeleteArgs) {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       const isDeleteKey = event.key === "Backspace" || event.key === "Delete";
-      // Ctrl/Cmd+D deletes the selection. preventDefault (below, on success)
-      // blocks the browser bookmark dialog — but only when a selection was
-      // actually deleted, so an empty canvas keeps the native bookmark.
-      const isModD = mod && event.key.toLowerCase() === "d";
+      // Ctrl/Cmd+D deletes the selection — exact chord only, so
+      // Ctrl+Shift+D (bookmark all tabs) and Ctrl+Alt+D keep working.
+      // preventDefault (below, on success) blocks the browser bookmark
+      // dialog — but only when a selection was actually deleted, so an
+      // empty canvas keeps the native bookmark.
+      const isModD = mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "d";
       if (!isDeleteKey && !isModD) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      // Ctrl/Cmd+D is scoped to the canvas surface: with items selected,
+      // the chord must not delete while focus sits in the AI sidebar or
+      // another editor control outside the canvas.
+      if (isModD && !target?.closest("[data-canvas-surface]")) return;
       if (deleteSelected()) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
