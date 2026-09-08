@@ -125,11 +125,14 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
   // Hydrate display state from Storage without firing `onTerminal`. Live
   // `AI_STATUS` events below remain the fast path and the sole `onTerminal`
   // source, so a replayed terminal stage never rebroadcasts chat. Skipped
-  // while locally working: the live event path owns the active run and a
-  // stale Storage snapshot must not clobber it.
+  // only while this client owns the in-flight run: the live event path owns
+  // it and a stale snapshot must not clobber it. A hydrated remote run has
+  // no local runId, so its terminal snapshot must still apply — otherwise a
+  // missed terminal event would latch the composer disabled with no exit
+  // (the realtime backstop needs a local subscription to recover).
   useEffect(() => {
     if (!storedStatus) return;
-    if (stage === "working") return;
+    if (runIdRef.current !== null) return;
     const snapshot: unknown = storedStatus;
     if (!isAiStatusFeedPayload(snapshot)) return;
     // Sentinel initial value for new rooms — no run has happened yet.
@@ -147,7 +150,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
       setStatusActive(false);
       setLastMessage(snapshot.message);
     }
-  }, [storedStatus, stage]);
+  }, [storedStatus]);
 
   // Status-only subscription: no payload/output over the wire (realtime
   // skill guidance). Guarded by `enabled` so nothing subscribes before the
