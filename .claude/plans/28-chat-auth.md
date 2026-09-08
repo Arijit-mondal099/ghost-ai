@@ -9,7 +9,7 @@ server-authenticated. No new deps, no Storage/Presence changes.
 
 ## Files to Create
 
-```
+```text
 app/api/ai/chat/assistant/route.ts  # ownership-gated assistant broadcast
 ```
 
