@@ -13,8 +13,9 @@ TaskRun, token route) is untouched.
   server-side `LiveObject`/`LiveMap` re-exported from `@liveblocks/core`.
 - `@liveblocks/react`: `useEventListener` (non-suspense — usable in the sidebar
   children slot, which sits inside `RoomProvider` but outside `ClientSideSuspense`).
-- `groq-sdk`: `client.chat.completions.create` with
-  `response_format: { type: "json_object" }`.
+- `groq-sdk`: `client.chat.completions.create` with a JSON-only system prompt
+  (no `response_format` — Qwen on Groq rejects JSON mode); `extractOpsJson`
+  recovers the payload from fences/chatter with up to 3 retried attempts.
 
 **Approved decisions (user answered clarifying questions):**
 
@@ -62,7 +63,8 @@ Ephemeral broadcast — not storage, so the "no new state system" invariant hold
 2. Read current canvas via `getStorageDocument(roomId, "json")` (labels/positions
    only) so the model extends rather than duplicates. Requires
    `LIVEBLOCKS_SECRET_KEY` in the Trigger environment.
-3. Groq (`groq-sdk`, `qwen/qwen3.6-27b`, `response_format json_object`) with a
+3. Groq (`groq-sdk`, `qwen/qwen3.6-27b`, no JSON mode — JSON-only system
+   prompt + `extractOpsJson` recovery with up to 3 attempts) with a
    system prompt constraining output to the 6 `NODE_SHAPES`, 8 `NODE_COLORS`,
    `SHAPES` dimensions, and spacing rules. Model returns an **op list**
    (discriminated union covering all 7 spec actions: add/move/resize/update-data/

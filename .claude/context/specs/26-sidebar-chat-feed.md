@@ -28,6 +28,9 @@ This is only for chat messages. Keep it separate from `ai-status-feed`, which ha
    - define or reuse a Zod schema in `types/tasks.ts`
    - message shape should include sender, role, content, and timestamp
    - validate feed messages before rendering them
+   - bind sender to the connection identity (spec 28): render `role: "user"`
+     only when `sender.id` matches the Liveblocks connection `user.id`;
+     never treat client-provided identity fields as authoritative
 
 ## Scope Limits
 
@@ -42,5 +45,6 @@ This is only for chat messages. Keep it separate from `ai-status-feed`, which ha
 - Sidebar subscribes to the `ai-chat` feed.
 - Users can send chat messages through the existing sidebar input.
 - Chat messages are validated before rendering.
+- Forged sender ids and client-broadcast Ghost messages never render.
 - `ai-chat` remains separate from `ai-status-feed`.
 - `bun run build` passes.

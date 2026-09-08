@@ -19,7 +19,11 @@ and reflect AI-driven canvas updates through Liveblocks.
 - `hooks/useDesignAgent` (`hooks/use-design-agent.ts`) — POSTs the prompt,
   tracks `AI_STATUS` RoomEvents (`start|processing|complete|error`), exposes
   `{stage, lastMessage, isActive, start}` plus an `onTerminal(message, ok)`
-  callback that fires once per broadcast (StrictMode-safe).
+  callback that fires once per own run (StrictMode-safe). Display state
+  follows every validated room event; `runId`/`publicToken` teardown and
+  `onTerminal` are scoped to `event.runId ===` local `runId` (via a ref
+  mirror), so one room's terminal event can never reset another run or emit
+  an unrelated assistant message — the initiator is the single producer.
 - Sidebar renders inside `RoomProvider` (via the `CanvasRoom` children slot in
   `editor-workspace-client.tsx`), so `useRealtimeRun` and `useEventListener`
   both resolve with no layout change.
@@ -70,7 +74,9 @@ skipColumns: ["payload","output"]})`; derive
    `EXECUTING` latches `isActive` on forever.
 3. `components/ai-sidebar/tabs.tsx` — `handleSend`: chat-send user message
    first, then `designStart`; abort backend call if chat send fails.
-   `onTerminal`: `sendAssistant(message)` for completion AND error text.
+   `onTerminal(message, ok, runId)`: terminal run messages post as Ghost
+   through `POST /api/ai/chat/assistant` (spec 28, server-origin only);
+   requester-local failures (`runId` null) append locally without broadcast.
    Render `<StatusStrip>` only when active; pass `disabled` + `isRunning`
    into `ChatInput`. `projectId`/`roomId` props now actually used.
 4. `components/ai-sidebar/chat-input.tsx` — accept `isRunning?`; disable
@@ -85,16 +91,20 @@ No new dependencies.
 
 ## Design
 
-### Assistant append (`use-ai-chat-feed.ts`)
+### Assistant append (`use-ai-chat-feed.ts` + `POST /api/ai/chat/assistant`)
 
 ```ts
-sendAssistant: (content: string) => boolean;
+sendAssistant: (runId: string | null, content: string) => Promise<boolean>;
 ```
 
-Same shape as `send()` but `role: "assistant"`, sender fixed to Ghost.
-Validated on receipt by the unmodified `isAiChatFeedPayload` on all
-clients. Failures set `sendError` (small inline message, never a
-sidebar-wide block).
+Spec 28: no client broadcasts as Ghost. With a `runId`, the hook POSTs to
+the ownership-gated server route, which verifies TaskRun ownership and
+broadcasts from server origin; the hook appends with the returned id (echo
+dedupes). With null `runId` (or a failed POST), it appends locally only.
+Listener (all clients): assistant renders only from server origin with the
+Ghost sender id; user messages render only when `sender.id` matches the
+connection `user.id`. `send()` fails fast on blank/ghost/`anonymous` ids.
+`sendError` pattern unchanged (small inline message, never sidebar-wide).
 
 ### Run lifecycle (`use-design-agent.ts`)
 
@@ -116,12 +126,15 @@ sidebar-wide block).
 
 ### Sidebar wiring (`tabs.tsx`)
 
-- Sender from Clerk `useUser()` (unchanged fallback chain).
+- Sender from Clerk `useUser()` (unchanged fallback chain), bound at render
+  to the Liveblocks connection id (spec 28 — forged ids dropped).
 - `handleSend` returns boolean straight to `ChatInput` (existing clear-
   only-on-success contract preserved).
-- Errors (trigger 4xx/5xx, token 403/404, realtime terminal failure) all
-  surface as Ghost `ai-chat` messages so every collaborator sees the same
-  state — per spec "Show errors as messages in `ai-chat` feed".
+- Errors: terminal run failures post as Ghost via the server route so every
+  collaborator sees the same state; requester-local failures (trigger
+  4xx/5xx, token 403/404, realtime terminal failure without a run, network)
+  append locally for the requester only — per spec 28 no client broadcasts
+  as Ghost.
 
 ### Status strip (`status-strip.tsx`)
 

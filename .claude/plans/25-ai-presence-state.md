@@ -26,9 +26,17 @@ status only. No AI generation logic, no background task triggers.
 **Approved decisions (user answered clarifying questions):**
 
 - Status feed → reuse `AI_STATUS` as the logical `ai-status-feed` (typed wrapper
-  - validator in `types/tasks.ts`). No new Storage key, no inbox, no parallel state.
-- Presence field → keep `isThinking` as source of truth (plan 19 decision stands);
-  badge tolerates spec's `thinking` wording at runtime, no type rename.
+  - validator in `types/tasks.ts`). No inbox, no parallel state.
+- Replay → persist latest status to Storage `aiStatus` LiveObject
+  (`{ runId, stage, message, updatedAt }`); `AI_STATUS` RoomEvents stay as the
+  low-latency fanout. Clients hydrate from Storage on mount (regular
+  `useStorage`, null-safe — sidebar lives outside `ClientSideSuspense`) and
+  apply live events on top. Task creates the key if missing (same wins-first
+  pattern as `flow`); terminal stages stay sticky so late joiners see the final
+  message until the next run. Fixes CodeRabbit replay finding on spec 25:7.
+- Presence field → `isThinking` is the source of truth (plan 19 decision stands);
+  spec section 4 now names `isThinking` directly, no runtime tolerance shim,
+  no type rename.
 - Thinking indicator → header status line in the AI sidebar, not a new banner.
 
 ## Files to Create
@@ -52,7 +60,8 @@ hooks/use-ai-status-feed.ts     # useAiStatusFeed(): subscribe to latest validat
    channel). No type change.
 6. `.claude/context/progress-tracker.md` — record implementation state.
 
-No `trigger/`, `app/api/`, `Storage`, or `Presence` type changes. No new deps.
+No `app/api/` or `Presence` type changes. `Storage.aiStatus` + task persist were
+added by the late-joiner replay fix. No new deps.
 
 ## Design
 
@@ -65,16 +74,18 @@ export type AiStatusFeedPayload = {
   runId: string;
   stage: AiStatusStage;
   message: string;
-  text?: string; // optional per spec; display fallback
+  updatedAt?: number; // storage-only recency marker; absent on wire RoomEvents
 };
 export function isAiStatusFeedPayload(v: unknown): v is AiStatusFeedPayload;
-export function aiStatusDisplayText(v: AiStatusFeedPayload): string; // message || text || ""
 ```
 
-Validation via `asRecord`: `runId` non-empty string, `stage` allow-list, `message`
-string, `text` string-if-present. Invalid → caller keeps previous message, never
-renders unvalidated content. No `design`/`spec` literals — spec generation reuses
-the same feed later with a different `runId`.
+Source of truth is the shared `AI_STATUS` RoomEvent in `liveblocks.config.ts`
+(`runId`, `stage`, `message` — the same fields `use-design-agent.ts` reads);
+display uses `message`. Validation via `asRecord`: `runId` non-empty string,
+`stage` allow-list, `message` string, `updatedAt` finite-number-if-present.
+Invalid → caller keeps previous message, never renders unvalidated content.
+No `design`/`spec` literals — spec generation reuses the same feed later with
+a different `runId`.
 
 ### Feed hook (`hooks/use-ai-status-feed.ts`)
 
@@ -103,10 +114,7 @@ the same feed later with a different `runId`.
 ### Cursor thinking badges (`live-cursors.tsx`)
 
 ```ts
-const thinking =
-  other.presence?.isThinking ??
-  (other.presence as { thinking?: boolean } | undefined)?.thinking ??
-  false;
+const thinking = other.presence?.isThinking === true;
 ```
 
 Badge becomes `flex items-center gap-1`; when `thinking`, append
@@ -118,7 +126,7 @@ Badge becomes `flex items-center gap-1`; when `thinking`, append
 
 - `bunx next typegen` → `typecheck` → `lint` → `fmt:check` (touched files) → `build`.
 - Static: bad payload (missing `runId`, bad `stage`, non-string `message`) keeps
-  previous message; `text`-only payload displays `text`.
+  previous message; cursor badge shows no spinner unless `isThinking === true`.
 - Live two-client matrix (needs `trigger dev` + keys from spec 24): prompt on A →
   both sidebars show working header, both composers disabled with spinner send,
   only latest message shown, tabs/close/specs still clickable; terminal event

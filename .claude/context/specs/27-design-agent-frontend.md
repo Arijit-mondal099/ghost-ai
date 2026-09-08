@@ -7,9 +7,12 @@ in real time, and reflect AI-driven canvas updates through Liveblocks.
 
 - On submit:
   - push the user message to the `ai-chat` feed
-  - call `POST /api/ai/design` with `{ prompt, roomId }`
-  - read `{ runId, publicToken }` from the response
-- store `runId` and `publicToken` in local state
+  - call `POST /api/ai/design` with `{ prompt, projectId, roomId }`
+    (`projectId` required, `roomId` defaults to `projectId`) and read `{ runId }`
+    from the response
+  - call `POST /api/ai/design/token` with `{ runId }` and read `{ token }`
+    (run-scoped public token) from the response
+- store `runId` and `publicToken` (the token) in local state
 
 2. Run status tracking
 
@@ -18,8 +21,12 @@ in real time, and reflect AI-driven canvas updates through Liveblocks.
   - disable the chat input
   - show a loading state (spinner in the button is enough)
 - When the run completes:
-  - push a final AI message to `ai-chat`
-  - reset loading + run state
+  - the initiating client pushes a final AI message to `ai-chat` (it is the
+    single producer — terminal `AI_STATUS` events carry `runId`, and only the
+    client holding that `runId` emits the message; other clients render it via
+    the feed and only update display state)
+  - the initiator resets loading + run state; other clients never clear
+    another run's subscription
 
 3. Canvas updates (realtime)
 
@@ -58,7 +65,10 @@ General
 
 - Use Tailwind + shadcn/ui only
 - Keep current layout intact
-- Show errors as messages in `ai-chat` feed
+- Show terminal run errors as Ghost messages in `ai-chat` feed (posted
+  through the ownership-gated server route so every client sees them);
+  requester-local failures (trigger/token/network, no run) render for the
+  requester only — no client may broadcast as Ghost (spec 28)
 
 ### Scope Limits
 
