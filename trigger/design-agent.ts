@@ -6,7 +6,8 @@
 //   1. Broadcast `AI_STATUS` ("start") so every client shows AI activity.
 //   2. Read the current canvas via `getStorageDocument(roomId, "json")` so the
 //      model extends the existing design instead of duplicating it.
-//   3. Ask Groq (`qwen/qwen3.6-27b`, JSON mode) for an op list covering the 7
+//   3. Ask Groq (`qwen/qwen3.6-27b`, JSON-only prompt + `extractOpsJson`
+//      recovery — no JSON mode) for an op list covering the 7
 //      spec actions: add/move/resize/update-data/delete node, add/delete edge.
 //   4. Validate every op server-side (shape/color allow-lists, position
 //      clamps, edge-endpoint resolution) and apply via `mutateStorage` with
@@ -14,8 +15,9 @@
 //      `LiveObject.from(node)` write pattern. Append-only: maps are never
 //      cleared.
 //   5. Broadcast `processing` before writes and `complete` (or `error`) after,
-//      so the shared RoomEvent status feed reflects task progress. Clients
-//      clear the simulated AI presence on `complete`/`error`.
+//      so the shared RoomEvent status feed reflects task progress, and persist
+//      the same payload to the `aiStatus` Storage key so late joiners replay
+//      it on mount. Clients clear the simulated AI presence on `complete`/`error`.
 //
 // Self-contained by design: shape/color/dimension vocabularies are duplicated
 // from `types/canvas.ts` + `lib/canvas/shape-definitions.ts` (cited below)
@@ -315,6 +317,27 @@ async function broadcast(
   message: string,
 ): Promise<void> {
   const event: AiStatusEvent = { type: "AI_STATUS", runId, stage, message };
+  // Persist the same payload to Storage so collaborators who join mid-run
+  // replay the latest status on mount (spec 25 fix: RoomEvents are ephemeral
+  // and never reach late joiners). Best-effort like the broadcast itself —
+  // a Storage failure must never fail the design run.
+  try {
+    await liveblocks.mutateStorage(roomId, ({ root }) => {
+      const store = root as unknown as {
+        get: (key: string) => LiveObject<LsonRecord> | undefined;
+        set: (key: string, value: LiveObject<LsonRecord>) => void;
+      };
+      const status = new LiveObject({
+        runId,
+        stage,
+        message,
+        updatedAt: Date.now(),
+      });
+      store.set("aiStatus", status);
+    });
+  } catch (error) {
+    logger.warn("design-agent status persist failed", { stage, error: String(error) });
+  }
   try {
     await liveblocks.broadcastEvent(roomId, event);
   } catch (error) {
@@ -493,6 +516,9 @@ export const designAgent = task({
     let cursorY = 0;
     let addedNodes = 0;
     let addedEdges = 0;
+    // Every successful canvas mutation (add/move/resize/update/delete),
+    // not just additions — drives the terminal summary below.
+    let appliedOps = 0;
 
     try {
       await liveblocks.mutateStorage(roomId, ({ root }) => {
@@ -564,6 +590,7 @@ export const designAgent = task({
               if (typeof node.data.label === "string")
                 resolve.set(node.data.label.trim().toLowerCase(), id);
               addedNodes += 1;
+              appliedOps += 1;
               break;
             }
             case "moveNode": {
@@ -595,6 +622,7 @@ export const designAgent = task({
                   },
                 }),
               );
+              appliedOps += 1;
               break;
             }
             case "resizeNode": {
@@ -619,6 +647,7 @@ export const designAgent = task({
                 id,
                 asLiveNode({ ...current, width, height, measured: { width, height } }),
               );
+              appliedOps += 1;
               break;
             }
             case "updateNode": {
@@ -637,6 +666,7 @@ export const designAgent = task({
               if (typeof data["label"] === "string") {
                 resolve.set((data["label"] as string).trim().toLowerCase(), id);
               }
+              appliedOps += 1;
               break;
             }
             case "deleteNode": {
@@ -654,6 +684,7 @@ export const designAgent = task({
                   liveEdges.delete(edgeId);
                 }
               }
+              appliedOps += 1;
               break;
             }
             case "addEdge": {
@@ -694,6 +725,7 @@ export const designAgent = task({
                 }),
               );
               addedEdges += 1;
+              appliedOps += 1;
               break;
             }
             case "deleteEdge": {
@@ -716,6 +748,7 @@ export const designAgent = task({
                 break;
               }
               liveEdges.delete(removed);
+              appliedOps += 1;
               break;
             }
           }
@@ -728,13 +761,14 @@ export const designAgent = task({
       return { ok: false, error: message };
     }
 
-    const appliedOps = addedNodes + addedEdges;
     const summary =
       appliedOps === 0
         ? "Ghost finished with no canvas changes."
-        : `Ghost added ${addedNodes} node${addedNodes === 1 ? "" : "s"} and ${addedEdges} edge${addedEdges === 1 ? "" : "s"}.`;
+        : addedNodes + addedEdges > 0
+          ? `Ghost added ${addedNodes} node${addedNodes === 1 ? "" : "s"} and ${addedEdges} edge${addedEdges === 1 ? "" : "s"}.`
+          : `Ghost applied ${appliedOps} canvas change${appliedOps === 1 ? "" : "s"}.`;
     const fullMessage = warnings.length > 0 ? `${summary} (${warnings.length} skipped)` : summary;
-    logger.info("design-agent complete", { addedNodes, addedEdges, warnings });
+    logger.info("design-agent complete", { addedNodes, addedEdges, appliedOps, warnings });
     await broadcast(liveblocks, roomId, runId, "complete", fullMessage);
     return { ok: true, addedNodes, addedEdges, appliedOps, warnings };
   },
