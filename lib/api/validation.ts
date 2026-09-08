@@ -181,6 +181,68 @@ function isIdRecord(value: unknown): boolean {
   return isPlainObject(value) && typeof value["id"] === "string";
 }
 
+// ---------------------------------------------------------------------------
+// Design agent trigger + token bodies (spec 23). `roomId` is the project id
+// (spec 08) — accepted as an optional override, defaulting to `projectId` so
+// callers that only know the project still work. The route verifies project
+// access after parsing; the token route verifies TaskRun ownership.
+// ---------------------------------------------------------------------------
+
+export type DesignTriggerBody = { prompt: string; projectId: string; roomId: string };
+export type DesignTokenBody = { runId: string };
+
+const DESIGN_PROMPT_MAX_LENGTH = 4000;
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function parseDesignTriggerBody(input: unknown): ParseResult<DesignTriggerBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["prompt", "projectId", "roomId"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const prompt = readNonEmptyString(input["prompt"]);
+  if (!prompt) {
+    return invalidBody("INVALID_BODY", "prompt is required");
+  }
+  if (prompt.length > DESIGN_PROMPT_MAX_LENGTH) {
+    return invalidBody(
+      "INVALID_BODY",
+      `prompt must be at most ${DESIGN_PROMPT_MAX_LENGTH} characters`,
+    );
+  }
+  const projectId = readNonEmptyString(input["projectId"]);
+  if (!projectId) {
+    return invalidBody("INVALID_BODY", "projectId is required");
+  }
+  const roomRaw = input["roomId"];
+  const roomId =
+    roomRaw === undefined || roomRaw === null ? projectId : readNonEmptyString(roomRaw);
+  if (!roomId) {
+    return invalidBody("INVALID_BODY", "roomId must be a non-empty string");
+  }
+  return { ok: true, value: { prompt, projectId, roomId } };
+}
+
+export function parseDesignTokenBody(input: unknown): ParseResult<DesignTokenBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["runId"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const runId = readNonEmptyString(input["runId"]);
+  if (!runId) {
+    return invalidBody("INVALID_BODY", "runId is required");
+  }
+  return { ok: true, value: { runId } };
+}
+
 export function parseCanvasSaveBody(input: unknown): ParseResult<CanvasSaveBody> {
   if (!isPlainObject(input)) {
     return invalidBody("INVALID_BODY", "Body must be a JSON object");

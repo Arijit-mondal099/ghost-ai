@@ -20,6 +20,7 @@ model Project {
   updatedAt      DateTime              @updatedAt
 
   collaborators ProjectCollaborator[]
+  taskRuns      TaskRun[]
 
   @@index([ownerId])
   @@index([createdAt])
