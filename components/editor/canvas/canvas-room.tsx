@@ -18,6 +18,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { useCallback, useRef } from "react";
 import { TrashIcon } from "lucide-react";
 
+import { AiPresenceOverlay } from "@/components/editor/canvas/ai-presence-overlay";
 import { CanvasColorToolbar } from "@/components/editor/canvas/canvas-color-toolbar";
 import { CanvasControlBar } from "@/components/editor/canvas/canvas-control-bar";
 import { CanvasEdge as CanvasEdgeRenderer } from "@/components/editor/canvas/canvas-edge";
@@ -213,6 +214,7 @@ function CanvasSurface({
         </div>
       )}
       <LiveCursors />
+      <AiPresenceOverlay />
       <ShapePanel />
       <ShapeDragPreview />
       <CanvasColorToolbar />

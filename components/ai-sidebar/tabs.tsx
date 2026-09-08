@@ -1,39 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
 
 import { ChatArea } from "./chat-area";
 import { ChatInput } from "./chat-input";
-import type { ChatMessage } from "./constants";
+import type { AISidebarTabsProps } from "./constants";
 import { SpecsTab } from "./specs-tab";
+import { StatusStrip } from "./status-strip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAiChatFeed } from "@/hooks/use-ai-chat-feed";
+import { useDesignAgent } from "@/hooks/use-design-agent";
 
 // ---------------------------------------------------------------------------
 // Tabbed layout for the AI sidebar: "Architect" (chat) and "Specs".
 // Plain shadcn tabs on theme tokens: the list is a full-width subtle track,
 // triggers carry only a text-size tweak — active/disabled/focus states come
 // from the primitive itself.
+//
+// Architect is collaborative room chat (spec 26) plus design generation
+// (spec 27): the user message travels over the room-scoped ephemeral
+// `ai-chat` feed (`AI_CHAT` RoomEvents, validated by
+// `isAiChatFeedPayload`), so every connected client sees the same ordered
+// history — then the same prompt is sent to the design agent, whose
+// completion/error text is appended back to `ai-chat` as a Ghost message.
+// Run status is tracked two ways: `useRealtimeRun` (inside the design hook)
+// drives the input-disabled/spinner lifecycle, and the `AI_STATUS` feed text
+// drives the status strip. Canvas updates need no code here:
+// `useLiveblocksFlow` reflects the task's Storage writes automatically.
 // ---------------------------------------------------------------------------
 
-function AISidebarTabs() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+function AISidebarTabs({ projectId, roomId }: AISidebarTabsProps) {
+  const { user } = useUser();
+  const { messages, sendError, send, sendAssistant } = useAiChatFeed();
+  const design = useDesignAgent({
+    projectId,
+    roomId,
+    onTerminal: (message) => {
+      sendAssistant(message);
+    },
+  });
 
-  function handleSend(content: string) {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-    };
-    setMessages((prev) => [...prev, userMessage]);
+  function handleSend(content: string): boolean {
+    const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? null;
+    const fallbackEmail = user?.emailAddresses?.[0]?.emailAddress ?? null;
+    const name =
+      user?.fullName?.trim() ||
+      user?.username?.trim() ||
+      primaryEmail ||
+      fallbackEmail ||
+      "Someone";
+    const chatOk = send(content, { id: user?.id ?? "anonymous", name });
+    // Never trigger the backend when the chat send failed — the draft stays
+    // in the composer and no orphan run starts.
+    if (!chatOk) return false;
+    void design.start(content);
+    return true;
   }
 
   function handleStarterSelect(prompt: string) {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: prompt,
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    void handleSend(prompt);
   }
 
   return (
@@ -51,7 +76,13 @@ function AISidebarTabs() {
 
       <TabsContent value="architect" className="mt-0 flex flex-1 flex-col overflow-hidden">
         <ChatArea messages={messages} onStarterSelect={handleStarterSelect} />
-        <ChatInput onSend={handleSend} />
+        {design.isActive ? <StatusStrip message={design.lastMessage} /> : null}
+        <ChatInput
+          onSend={handleSend}
+          disabled={design.isActive}
+          isRunning={design.isActive}
+          sendError={sendError}
+        />
       </TabsContent>
 
       <TabsContent value="specs" className="mt-0 flex flex-1 flex-col overflow-hidden">
