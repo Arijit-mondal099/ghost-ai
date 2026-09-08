@@ -1,30 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useEventListener } from "@liveblocks/react";
+import { useEventListener, useStorage } from "@liveblocks/react";
+
+import { isAiStatusFeedPayload } from "@/types/tasks";
 
 // ---------------------------------------------------------------------------
-// Simulated AI presence for the collaborative canvas (spec 24).
+// Simulated AI presence for the collaborative canvas (specs 24 + 25).
 //
 // A Trigger.dev task has no Liveblocks connection, so it cannot set real
 // presence. Instead every client renders this overlay from the shared
-// `AI_STATUS` RoomEvent feed: while a design run is active, a Ghost cursor +
-// thinking badge floats over the canvas on ALL connected screens; it clears
-// on `complete` / `error`. Display-only and `pointer-events-none` — same
-// contract as `LiveCursors`, but driven by broadcasts instead of `useOthers`.
+// `AI_STATUS` feed: RoomEvents for low-latency fanout plus the persisted
+// `aiStatus` Storage key for late-joiner replay (RoomEvents never reach
+// collaborators who join mid-run). While a design run is active, a Ghost
+// cursor + thinking badge floats over the canvas on ALL connected screens;
+// it clears on `complete` / `error`. Display-only and `pointer-events-none`
+// — same contract as `LiveCursors`, but driven by broadcasts + Storage
+// instead of `useOthers`.
 // ---------------------------------------------------------------------------
 
 function AiPresenceOverlay() {
   const [active, setActive] = useState(false);
   const [message, setMessage] = useState("");
   const [mounted, setMounted] = useState(false);
+  // Regular hook (null-safe): the canvas surface suspends on the flow graph,
+  // but this overlay must also render before any status was ever persisted.
+  const storedStatus = useStorage((root) => root.aiStatus);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  useEventListener(({ event }) => {
+  // Late-joiner replay: adopt the persisted snapshot when locally idle.
+  // Skipped while already active so a stale snapshot never clobbers live events.
+  useEffect(() => {
+    if (!storedStatus || active) return;
+    const snapshot: unknown = storedStatus;
+    if (!isAiStatusFeedPayload(snapshot)) return;
+    if (snapshot.runId === "init") return;
+    if (snapshot.stage === "complete" || snapshot.stage === "error") return;
+    setActive(true);
+    setMessage(snapshot.message);
+  }, [storedStatus, active]);
+
+  useEventListener(({ event, connectionId, user }) => {
     if (event.type !== "AI_STATUS") return;
+    // Same origin guard as `use-design-agent.ts`: only the task's server
+    // broadcasts drive the overlay; client-spoofed stages are ignored.
+    if (connectionId !== -1 || user !== null) return;
+    if (!isAiStatusFeedPayload(event)) return;
     if (event.stage === "complete" || event.stage === "error") {
       setActive(false);
       setMessage("");

@@ -19,10 +19,12 @@ import { useDesignAgent } from "@/hooks/use-design-agent";
 //
 // Architect is collaborative room chat (spec 26) plus design generation
 // (spec 27): the user message travels over the room-scoped ephemeral
-// `ai-chat` feed (`AI_CHAT` RoomEvents, validated by
-// `isAiChatFeedPayload`), so every connected client sees the same ordered
-// history — then the same prompt is sent to the design agent, whose
-// completion/error text is appended back to `ai-chat` as a Ghost message.
+// `ai-chat` feed (`AI_CHAT` RoomEvents, sender-bound to the connection
+// identity and validated by `isAiChatFeedPayload`),
+// so every connected client sees the same ordered history — then the same
+// prompt is sent to the design agent, whose terminal text is posted back to
+// `ai-chat` as a Ghost message through the ownership-gated server route
+// (spec 28: only the initiating run's owner can publish as Ghost).
 // Run status is tracked two ways: `useRealtimeRun` (inside the design hook)
 // drives the input-disabled/spinner lifecycle, and the `AI_STATUS` feed text
 // drives the status strip. Canvas updates need no code here:
@@ -35,8 +37,10 @@ function AISidebarTabs({ projectId, roomId }: AISidebarTabsProps) {
   const design = useDesignAgent({
     projectId,
     roomId,
-    onTerminal: (message) => {
-      sendAssistant(message);
+    // Terminal Ghost messages go through the ownership-gated server route
+    // (spec 28); requester-local failures (runId null) append locally only.
+    onTerminal: (message, _ok, runId) => {
+      void sendAssistant(runId, message);
     },
   });
 

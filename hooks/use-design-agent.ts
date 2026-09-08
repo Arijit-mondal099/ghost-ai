@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useEventListener } from "@liveblocks/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useEventListener, useStorage } from "@liveblocks/react";
 import { useRealtimeRun } from "@trigger.dev/react-hooks";
+
+import { isAiStatusFeedPayload } from "@/types/tasks";
 
 // ---------------------------------------------------------------------------
 // Client bridge to the design agent task (specs 24 + 27).
@@ -13,7 +15,11 @@ import { useRealtimeRun } from "@trigger.dev/react-hooks";
 // tracks the Trigger.dev run lifecycle directly; progress text arrives as
 // room-wide `AI_STATUS` RoomEvents broadcast by the task itself — so every
 // connected client, not just the requester, observes the same status feed
-// through this hook.
+// through this hook. The same payload is persisted to the `aiStatus` Storage
+// key (spec 25 replay fix): collaborators who join mid-run miss the ephemeral
+// events, so this hook hydrates display state from Storage on mount. Storage
+// hydration is display-only and never fires `onTerminal` (firing it would
+// rebroadcast a terminal chat message from the late joiner to everyone).
 //
 // `isActive` is the union of both signals: the `AI_STATUS` stage and the
 // realtime run status. Realtime also acts as a backstop — if the run reaches
@@ -23,11 +29,23 @@ import { useRealtimeRun } from "@trigger.dev/react-hooks";
 //
 // Terminal stages (`complete` / `error`, from either source) are surfaced
 // twice: as sticky `lastMessage` state for status displays, and via the
-// optional `onTerminal` callback so chat histories can append exactly one
-// assistant message per run. The callback fires from the event listener or
-// from the guarded realtime effect (both check the current stage first, and
-// the stage flip makes them mutually exclusive), so StrictMode
-// double-effects cannot duplicate messages.
+// optional `onTerminal(message, ok, runId)` callback so chat histories can
+// append exactly one assistant message per run. `runId` is the completed
+// run's id, or null for requester-local failures that never started a run
+// (trigger/token/network errors) — the consumer posts run terminals through
+// the ownership-gated server route and appends local failures without
+// broadcast (spec 28: no client may speak as Ghost). Display state follows EVERY validated room event
+// (the feed is room-wide — all collaborators see the latest status), but
+// requester-local state (`runId`/`publicToken`) and `onTerminal` are scoped
+// to the initiating run: events whose `runId` does not match the locally
+// started run update display only and never clear the subscription or
+// broadcast a terminal chat message. Without this, a second user's terminal
+// event would reset this client's run and emit an unrelated assistant
+// message. The initiator's hook is therefore the single `onTerminal`
+// producer per run; the realtime backstop below is already per-run scoped
+// (it only subscribes with the local credentials), and the stage flip keeps
+// the two paths mutually exclusive, so StrictMode double-effects cannot
+// duplicate messages.
 //
 // Must render inside `<RoomProvider>` (both consumers — the AI sidebar via
 // the `CanvasRoom` children slot, and the in-canvas overlay — are).
@@ -41,7 +59,7 @@ type DesignAgentStage = "idle" | "working" | "done" | "error";
 type UseDesignAgentArgs = {
   projectId: string;
   roomId: string;
-  onTerminal?: (message: string, ok: boolean) => void;
+  onTerminal?: (message: string, ok: boolean, runId: string | null) => void;
 };
 
 // Realtime statuses that mean "still running" — everything else terminal is
@@ -87,6 +105,49 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
   const [statusActive, setStatusActive] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [publicToken, setPublicToken] = useState<string | null>(null);
+  // Ref mirror so the event listener (registered once per render cycle)
+  // never compares against a stale `runId` closure.
+  const runIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    runIdRef.current = runId;
+  }, [runId]);
+  // Records the runId that already emitted a terminal message. A repeated
+  // terminal broadcast for the same run (or a realtime terminal arriving
+  // after the event path already reported) must update display only —
+  // never a second `onTerminal`. Cleared when a new run starts.
+  const emittedRef = useRef<string | null>(null);
+
+  // Replay source: persisted latest status for late joiners. Regular (non-
+  // suspense) hook because the sidebar renders outside `ClientSideSuspense` —
+  // `null` while loading or before the first run, never suspends.
+  const storedStatus = useStorage((root) => root.aiStatus);
+
+  // Hydrate display state from Storage without firing `onTerminal`. Live
+  // `AI_STATUS` events below remain the fast path and the sole `onTerminal`
+  // source, so a replayed terminal stage never rebroadcasts chat. Skipped
+  // while locally working: the live event path owns the active run and a
+  // stale Storage snapshot must not clobber it.
+  useEffect(() => {
+    if (!storedStatus) return;
+    if (stage === "working") return;
+    const snapshot: unknown = storedStatus;
+    if (!isAiStatusFeedPayload(snapshot)) return;
+    // Sentinel initial value for new rooms — no run has happened yet.
+    if (snapshot.runId === "init") return;
+    if (snapshot.stage === "start" || snapshot.stage === "processing") {
+      setStage("working");
+      setStatusActive(true);
+      setLastMessage(snapshot.message);
+    } else if (snapshot.stage === "complete") {
+      setStage("done");
+      setStatusActive(false);
+      setLastMessage(snapshot.message);
+    } else {
+      setStage("error");
+      setStatusActive(false);
+      setLastMessage(snapshot.message);
+    }
+  }, [storedStatus, stage]);
 
   // Status-only subscription: no payload/output over the wire (realtime
   // skill guidance). Guarded by `enabled` so nothing subscribes before the
@@ -108,33 +169,47 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
 
   // Realtime backstop: a terminal run status without a matching AI_STATUS
   // terminal event still resets the hook and reports once. The stage guard
-  // makes this mutually exclusive with the listener path below.
+  // plus the emission guard make this mutually exclusive with the listener
+  // path below.
   useEffect(() => {
     if (realtimeStatus === undefined) return;
     if (REALTIME_ACTIVE_STATUSES.has(realtimeStatus)) return;
     if (realtimeStatus === "COMPLETED") {
       if (stage !== "working") return;
+      if (runId !== null && emittedRef.current === runId) return;
       const message = "Design applied to the canvas.";
+      emittedRef.current = runId;
       setStage("done");
       setStatusActive(false);
       setLastMessage(message);
       setRunId(null);
       setPublicToken(null);
-      onTerminal?.(message, true);
+      onTerminal?.(message, true, runId);
     } else {
       if (stage !== "working") return;
+      if (runId !== null && emittedRef.current === runId) return;
       const message = `Design run ended (${realtimeStatus}). Try again.`;
+      emittedRef.current = runId;
       setStage("error");
       setStatusActive(false);
       setLastMessage(message);
       setRunId(null);
       setPublicToken(null);
-      onTerminal?.(message, false);
+      onTerminal?.(message, false, runId);
     }
-  }, [realtimeStatus, stage, onTerminal]);
+  }, [realtimeStatus, stage, runId, onTerminal]);
 
-  useEventListener(({ event }) => {
+  useEventListener(({ event, connectionId, user }) => {
     if (event.type !== "AI_STATUS") return;
+    // Origin guard: the design-agent task is the sole legitimate producer
+    // (server broadcast via REST → `connectionId -1`, `user null`). A room
+    // member could otherwise spoof `start`/`processing` and disable
+    // everyone's composer, or forge terminal stages for other runs.
+    if (connectionId !== -1 || user !== null) return;
+    if (!isAiStatusFeedPayload(event)) return;
+    // Room-wide display follows every event; requester-local teardown and
+    // `onTerminal` fire only for the locally initiating run.
+    const isOwnRun = event.runId === runIdRef.current;
     if (event.stage === "start" || event.stage === "processing") {
       setStage("working");
       setStatusActive(true);
@@ -143,16 +218,30 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
       setStage("done");
       setStatusActive(false);
       setLastMessage(event.message);
+      if (!isOwnRun) return;
+      if (emittedRef.current === event.runId) {
+        setRunId(null);
+        setPublicToken(null);
+        return;
+      }
+      emittedRef.current = event.runId;
       setRunId(null);
       setPublicToken(null);
-      onTerminal?.(event.message, true);
+      onTerminal?.(event.message, true, event.runId);
     } else {
       setStage("error");
       setStatusActive(false);
       setLastMessage(event.message);
+      if (!isOwnRun) return;
+      if (emittedRef.current === event.runId) {
+        setRunId(null);
+        setPublicToken(null);
+        return;
+      }
+      emittedRef.current = event.runId;
       setRunId(null);
       setPublicToken(null);
-      onTerminal?.(event.message, false);
+      onTerminal?.(event.message, false, event.runId);
     }
   });
 
@@ -170,6 +259,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
       if (!trimmed) return false;
       setStage("working");
       setStatusActive(true);
+      emittedRef.current = null;
       setLastMessage("Sending your prompt to Ghost…");
       try {
         const response = await fetch("/api/ai/design", {
@@ -182,7 +272,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
           setStage("error");
           setStatusActive(false);
           setLastMessage(message);
-          onTerminal?.(message, false);
+          onTerminal?.(message, false, null);
           return false;
         }
         const triggerBody: unknown = await response.json();
@@ -195,7 +285,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
           setStage("error");
           setStatusActive(false);
           setLastMessage(message);
-          onTerminal?.(message, false);
+          onTerminal?.(message, false, null);
           return false;
         }
         setRunId(triggeredRunId);
@@ -210,7 +300,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
           setStatusActive(false);
           setLastMessage(message);
           setRunId(null);
-          onTerminal?.(message, false);
+          onTerminal?.(message, false, null);
           return false;
         }
         const token = readToken(await tokenResponse.json());
@@ -220,7 +310,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
           setStatusActive(false);
           setLastMessage(message);
           setRunId(null);
-          onTerminal?.(message, false);
+          onTerminal?.(message, false, null);
           return false;
         }
         setPublicToken(token);
@@ -234,7 +324,7 @@ function useDesignAgent({ projectId, roomId, onTerminal }: UseDesignAgentArgs): 
         setLastMessage(message);
         setRunId(null);
         setPublicToken(null);
-        onTerminal?.(message, false);
+        onTerminal?.(message, false, null);
         return false;
       }
     },

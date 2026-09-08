@@ -13,6 +13,7 @@ import {
 import { useLiveblocksFlow } from "@liveblocks/react-flow";
 import { ClientSideSuspense } from "@liveblocks/react/suspense";
 import { LiveblocksProvider, RoomProvider } from "@liveblocks/react";
+import { LiveObject } from "@liveblocks/client";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 
 import { useCallback, useRef } from "react";
@@ -266,7 +267,18 @@ function CanvasRoom({
   const restoreGuard = useRef(false);
   return (
     <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
-      <RoomProvider id={roomId} initialPresence={{ cursor: null, isThinking: false }}>
+      <RoomProvider
+        id={roomId}
+        initialPresence={{ cursor: null, isThinking: false }}
+        initialStorage={{
+          aiStatus: new LiveObject({
+            runId: "init",
+            stage: "complete" as const,
+            message: "",
+            updatedAt: 0,
+          }),
+        }}
+      >
         <ErrorBoundary FallbackComponent={CanvasErrorFallback}>
           <ClientSideSuspense
             fallback={
