@@ -68,7 +68,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const me = await currentUser();
+  // Verified addresses only (see trigger route): an unverified secondary
+  // address matching an invite must not mint run tokens.
   const userEmails = (me?.emailAddresses ?? [])
+    .filter((ea) => ea.verification?.status === "verified")
     .map((ea) => ea.emailAddress.toLowerCase())
     .filter((address) => address.length > 0);
 

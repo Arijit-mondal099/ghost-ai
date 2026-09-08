@@ -4,6 +4,8 @@
 // union so the handler does a single if (!parsed.ok) return ... check.
 // ---------------------------------------------------------------------------
 
+import { AI_CHAT_CONTENT_MAX_LENGTH } from "@/types/tasks";
+
 const DEFAULT_PROJECT_NAME = "Untitled Project";
 const NAME_MAX_LENGTH = 120;
 
@@ -241,6 +243,38 @@ export function parseDesignTokenBody(input: unknown): ParseResult<DesignTokenBod
     return invalidBody("INVALID_BODY", "runId is required");
   }
   return { ok: true, value: { runId } };
+}
+
+// ---------------------------------------------------------------------------
+// Assistant chat broadcast body (spec 28). `{ runId, message }` — the route
+// verifies the requester owns the TaskRun before the server broadcasts the
+// Ghost message, so only the initiating run's owner can post as Ghost.
+// ---------------------------------------------------------------------------
+
+export type AssistantMessageBody = { runId: string; message: string };
+
+export function parseAssistantMessageBody(input: unknown): ParseResult<AssistantMessageBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["runId", "message"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const runId = readNonEmptyString(input["runId"]);
+  if (!runId) {
+    return invalidBody("INVALID_BODY", "runId is required");
+  }
+  const message = readNonEmptyString(input["message"]);
+  if (!message) {
+    return invalidBody("INVALID_BODY", "message is required");
+  }
+  if (message.length > AI_CHAT_CONTENT_MAX_LENGTH) {
+    return invalidBody(
+      "INVALID_BODY",
+      `message must be at most ${AI_CHAT_CONTENT_MAX_LENGTH} characters`,
+    );
+  }
+  return { ok: true, value: { runId, message } };
 }
 
 export function parseCanvasSaveBody(input: unknown): ParseResult<CanvasSaveBody> {
