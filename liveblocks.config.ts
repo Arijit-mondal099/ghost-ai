@@ -4,7 +4,8 @@
 // Only the shapes that the realtime collaboration surface needs today are
 // defined: `Presence` for cursor + thinking indicator, `UserMeta` for the
 // per-user metadata attached to session tokens in /api/liveblocks-auth.
-// `RoomEvent`, `ThreadMetadata`, and `RoomInfo` are left as `{}` and will
+// `RoomEvent` carries the design agent status feed (spec 24).
+// `ThreadMetadata` and `RoomInfo` are left as `{}` and will
 // be filled in by their owning specs.
 //
 // `Storage` is intentionally left as `{}` here. The canvas graph itself is
@@ -47,7 +48,35 @@ declare global {
     };
 
     // Custom events, for useBroadcastEvent, useEventListener
-    RoomEvent: {};
+    //
+    // `AI_STATUS` is the design agent's shared status feed (spec 24, logical
+    // name `ai-status-feed`). The `design-agent` Trigger.dev task broadcasts
+    // these via `liveblocks.broadcastEvent(roomId, …)` (no websocket needed);
+    // every connected client receives them through `useEventListener`, so
+    // progress is visible to all collaborators, not just the requester.
+    // Ephemeral — never persisted to Storage.
+    //
+    // `AI_CHAT` is the collaborative sidebar chat feed (spec 26, logical name
+    // `ai-chat`). Clients broadcast it via `useBroadcastEvent` from the AI
+    // sidebar and receive it via `useEventListener`. Room-scoped and
+    // ephemeral like `AI_STATUS`, but a separate channel: status updates must
+    // never render as chat messages and chat messages must never drive AI
+    // activity indicators.
+    RoomEvent:
+      | {
+          type: "AI_STATUS";
+          runId: string;
+          stage: "start" | "processing" | "complete" | "error";
+          message: string;
+        }
+      | {
+          type: "AI_CHAT";
+          id: string;
+          sender: { id: string; name: string };
+          role: "user" | "assistant";
+          content: string;
+          timestamp: number;
+        };
 
     // Custom metadata set on threads, for useThreads, useCreateThread, etc.
     ThreadMetadata: {};
