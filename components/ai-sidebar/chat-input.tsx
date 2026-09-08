@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpIcon } from "lucide-react";
+import { ArrowUpIcon, LoaderCircleIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,18 +15,21 @@ import { cn } from "@/lib/utils";
 // ---------------------------------------------------------------------------
 
 export type ChatInputProps = {
-  onSend: (content: string) => void;
+  onSend: (content: string) => boolean;
   disabled?: boolean;
+  isRunning?: boolean;
+  sendError?: string | null;
 };
 
 const MIN_HEIGHT = 72;
 const MAX_HEIGHT = 160;
 
-function ChatInput({ onSend, disabled }: ChatInputProps) {
+function ChatInput({ onSend, disabled, isRunning, sendError }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const armed = value.trim().length > 0 && !disabled;
+  const busy = disabled === true || isRunning === true;
+  const armed = value.trim().length > 0 && !busy;
 
   function resize() {
     const el = textareaRef.current;
@@ -38,8 +41,11 @@ function ChatInput({ onSend, disabled }: ChatInputProps) {
   }
 
   function submit() {
-    if (value.trim() && !disabled) {
-      onSend(value.trim());
+    if (!value.trim() || busy) return;
+    const ok = onSend(value.trim());
+    // Clear only after a successful send so a failed broadcast keeps the
+    // draft in the composer (spec 26).
+    if (ok) {
       setValue("");
       requestAnimationFrame(resize);
     }
@@ -58,6 +64,11 @@ function ChatInput({ onSend, disabled }: ChatInputProps) {
 
   return (
     <div className="border-t border-surface-border p-3">
+      {sendError ? (
+        <p role="alert" className="mb-2 text-xs leading-relaxed text-state-error">
+          {sendError}
+        </p>
+      ) : null}
       <div
         className={cn(
           "rounded-2xl border bg-elevated transition-colors",
@@ -75,7 +86,7 @@ function ChatInput({ onSend, disabled }: ChatInputProps) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder="Describe the system to draft…"
-          disabled={disabled}
+          disabled={busy}
           rows={2}
           aria-label="Message Ghost Architect"
           className="min-h-[72px] max-h-[160px] resize-none border-0 bg-transparent px-3 pt-2.5 pb-1 text-sm text-copy-primary shadow-none placeholder:text-copy-faint focus-visible:ring-0"
@@ -89,10 +100,15 @@ function ChatInput({ onSend, disabled }: ChatInputProps) {
             size="icon-sm"
             onClick={submit}
             disabled={!armed}
-            aria-label="Send message"
+            aria-label={isRunning === true ? "Ghost is drafting" : "Send message"}
+            aria-busy={isRunning === true}
             className="shrink-0 rounded-xl"
           >
-            <ArrowUpIcon />
+            {isRunning === true ? (
+              <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <ArrowUpIcon />
+            )}
           </Button>
         </div>
       </div>

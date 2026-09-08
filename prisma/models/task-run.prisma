@@ -1,0 +1,18 @@
+// ---------------------------------------------------------------------------
+// Task run records: ownership link between Trigger.dev runs and the user who
+// triggered them. The token route verifies `userId` against this row before
+// minting a run-scoped public token. Rows cascade when the project is deleted.
+// ---------------------------------------------------------------------------
+
+model TaskRun {
+  id        String   @id @default(cuid())
+  runId     String   @unique
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([userId, projectId])
+}

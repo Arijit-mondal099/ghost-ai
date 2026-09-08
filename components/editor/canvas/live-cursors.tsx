@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useViewport } from "@xyflow/react";
 import { useOthers } from "@liveblocks/react";
+import { LoaderCircleIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,9 @@ function LiveCursors() {
         const screenY = cursor.y * zoom + vy;
         const name = other.info?.name?.trim() || "Anonymous";
         const color = other.info?.color || "#52A8FF";
+        // Existing `Presence.isThinking` contract (spec 25): spinner shows only
+        // when true; false or missing stays a plain name badge.
+        const thinking = other.presence?.isThinking === true;
         return (
           <div
             key={other.connectionId}
@@ -82,13 +86,14 @@ function LiveCursors() {
             </svg>
             <div
               className={cn(
-                "absolute left-4 top-4 whitespace-nowrap rounded-md border border-surface-border px-1.5 py-0.5 text-[10px] font-medium text-copy-primary",
+                "absolute top-4 left-4 flex items-center gap-1 whitespace-nowrap rounded-md border border-surface-border px-1.5 py-0.5 text-[10px] font-medium text-copy-primary",
               )}
               style={{
                 background: color,
                 boxShadow: "0 0 0 2px var(--accent-primary-dim)",
               }}
             >
+              {thinking ? <LoaderCircleIcon aria-hidden className="h-3 w-3 animate-spin" /> : null}
               {name}
             </div>
           </div>

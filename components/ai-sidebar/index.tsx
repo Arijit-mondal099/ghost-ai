@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // stays `w-80` — the workspace client reserves exactly `pr-80` for it.
 // ---------------------------------------------------------------------------
 
-function AISidebar({ isOpen, onClose }: AISidebarProps) {
+function AISidebar({ isOpen, onClose, projectId, roomId }: AISidebarProps) {
   return (
     <aside
       inert={!isOpen}
@@ -23,7 +23,7 @@ function AISidebar({ isOpen, onClose }: AISidebarProps) {
       )}
     >
       <AISidebarHeader onClose={onClose} />
-      <AISidebarTabs />
+      <AISidebarTabs projectId={projectId} roomId={roomId} />
     </aside>
   );
 }

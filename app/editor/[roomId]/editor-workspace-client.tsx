@@ -144,10 +144,18 @@ function EditorWorkspaceClient({ project, projects, isOwner }: EditorWorkspaceCl
             onOpenChange={setIsTemplatesOpen}
             onImported={() => setTemplateFitVersion((v) => v + 1)}
           />
+          {/* The AI sidebar also lives here (it is `fixed`, so the visual
+              position is unchanged): `useDesignAgent` listens for the
+              room-wide AI_STATUS feed via `useEventListener`, which needs
+              the room context. */}
+          <AISidebar
+            isOpen={isAiSidebarOpen}
+            onClose={() => setIsAiSidebarOpen(false)}
+            projectId={project.id}
+            roomId={project.id}
+          />
         </CanvasRoom>
       </main>
-
-      <AISidebar isOpen={isAiSidebarOpen} onClose={() => setIsAiSidebarOpen(false)} />
 
       <CreateProjectDialog
         open={dialogs.isCreateOpen}
