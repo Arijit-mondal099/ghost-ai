@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon, CopyIcon, UserPlusIcon, XIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, LoaderCircleIcon, UserPlusIcon, XIcon } from "lucide-react";
 
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CollaboratorListSkeleton } from "@/components/loading";
 import type { Collaborator, ShareOwner } from "@/hooks/use-share-dialog";
 
 // ---------------------------------------------------------------------------
@@ -181,7 +182,9 @@ function ShareProjectDialog({
           </p>
           <ScrollArea className="max-h-60 w-full overflow-hidden rounded-xl border border-surface-border">
             {isLoading && collaborators.length === 0 ? (
-              <p className="px-2 py-3 text-xs text-copy-muted">Loading collaborators…</p>
+              <div role="status" aria-label="Loading collaborators" className="px-1 py-1">
+                <CollaboratorListSkeleton />
+              </div>
             ) : collaborators.length === 0 ? (
               <p className="px-2 py-3 text-xs text-copy-muted">No collaborators yet.</p>
             ) : (
@@ -221,8 +224,13 @@ function ShareProjectDialog({
                           onClick={() => onRemove(row.id)}
                           disabled={isRemovingId === row.id}
                           aria-label={`Remove ${row.name ?? row.email}`}
+                          aria-busy={isRemovingId === row.id}
                         >
-                          <XIcon />
+                          {isRemovingId === row.id ? (
+                            <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <XIcon />
+                          )}
                         </Button>
                       ) : null}
                     </li>
@@ -253,9 +261,17 @@ function ShareProjectDialog({
                 className="bg-surface text-copy-primary placeholder:text-copy-muted"
                 disabled={isInviting}
               />
-              <Button type="submit" disabled={!formEmail.trim() || isInviting}>
-                <UserPlusIcon />
-                Invite
+              <Button
+                type="submit"
+                disabled={!formEmail.trim() || isInviting}
+                aria-busy={isInviting}
+              >
+                {isInviting ? (
+                  <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <UserPlusIcon />
+                )}
+                {isInviting ? "Inviting…" : "Invite"}
               </Button>
             </div>
           </form>

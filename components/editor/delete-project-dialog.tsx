@@ -1,5 +1,7 @@
 "use client";
 
+import { LoaderCircleIcon } from "lucide-react";
+
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import type { Project } from "@/lib/projects";
@@ -40,8 +42,17 @@ function DeleteProjectDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" variant="destructive" onClick={onSubmit} disabled={isSubmitting}>
-            Delete
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onSubmit}
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+          >
+            {isSubmitting ? (
+              <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+            ) : null}
+            {isSubmitting ? "Deleting…" : "Delete"}
           </Button>
         </EditorDialog.Footer>
       </EditorDialog.Content>

@@ -1,5 +1,7 @@
 "use client";
 
+import { LoaderCircleIcon } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { SHAPES } from "@/lib/canvas/shape-definitions";
 import { NODE_COLORS, type NodeShape } from "@/types/canvas";
@@ -180,9 +182,15 @@ type StarterTemplateCardProps = {
   template: CanvasTemplate;
   onImport: (template: CanvasTemplate) => void;
   disabled: boolean;
+  isImporting?: boolean;
 };
 
-function StarterTemplateCard({ template, onImport, disabled }: StarterTemplateCardProps) {
+function StarterTemplateCard({
+  template,
+  onImport,
+  disabled,
+  isImporting,
+}: StarterTemplateCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-surface-border bg-surface p-4">
       <div className="flex items-start justify-between gap-2">
@@ -199,8 +207,12 @@ function StarterTemplateCard({ template, onImport, disabled }: StarterTemplateCa
         size="sm"
         disabled={disabled}
         onClick={() => onImport(template)}
+        aria-busy={isImporting === true}
       >
-        Import
+        {isImporting === true ? (
+          <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+        ) : null}
+        {isImporting === true ? "Importing…" : "Import"}
       </Button>
     </div>
   );

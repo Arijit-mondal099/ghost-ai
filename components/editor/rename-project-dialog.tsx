@@ -1,5 +1,7 @@
 "use client";
 
+import { LoaderCircleIcon } from "lucide-react";
+
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,8 +65,11 @@ function RenameProjectDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              Save
+            <Button type="submit" disabled={!canSubmit} aria-busy={isSubmitting}>
+              {isSubmitting ? (
+                <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+              ) : null}
+              {isSubmitting ? "Saving…" : "Save"}
             </Button>
           </EditorDialog.Footer>
         </form>

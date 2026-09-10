@@ -9,13 +9,14 @@ import { slugify, type Project } from "@/lib/projects";
 // Single source of truth for the editor's project dialog state and the
 // Create / Rename / Delete project actions.
 //
-// The project list is owned by the server component (`app/editor/page.tsx`)
+// The project list is owned by the editor layout (`app/editor/layout.tsx`)
 // and passed in via `initialProjects` so the list survives `router.refresh()`
 // without a client-side cache. The hook derives `ownedProjects` /
-// `sharedProjects` from that input. The Rename and Delete handlers call
-// `fetch` + `router.refresh()`; the Create handler navigates straight into
-// the new workspace (`/editor/{id}`) so the user lands on the canvas
-// without an intermediate refresh.
+// `sharedProjects` from that input. Rename calls `fetch` + `router.refresh()`;
+// Create navigates straight into the new workspace (`/editor/{id}`) and then
+// refreshes so the persistent shell list picks up the new project (the
+// layout payload is otherwise reused verbatim on navigation); Delete
+// navigates home and refreshes.
 //
 // Room ID generation is a stub for the upcoming real-time canvas spec:
 // `slugify(name) + "-" + shortSuffix()`. The room ID is not yet sent to
@@ -141,6 +142,10 @@ export function useProjectActions(initialProjects: Project[]): UseProjectActions
       setDialog({ type: null });
       setFormName("");
       router.push(`/editor/${created.id}`);
+      // The editor layout payload is reused on navigation — without this
+      // the sidebar list (and the shell's room lookup) never learns about
+      // the new project.
+      router.refresh();
     } catch (error) {
       console.error("Failed to create project:", error);
     } finally {
