@@ -30,6 +30,7 @@ import { PresenceAvatars } from "@/components/editor/canvas/presence-avatars";
 import { RateLimitOverlay } from "@/components/editor/canvas/rate-limit-overlay";
 import { ShapeDragPreview } from "@/components/editor/canvas/shape-drag-preview";
 import { ShapePanel } from "@/components/editor/canvas/shape-panel";
+import { CanvasConnecting } from "@/components/loading";
 import { useCanvasDelete } from "@/hooks/use-canvas-delete";
 import { useCanvasDrop } from "@/hooks/use-canvas-drop";
 import { useCanvasAutosave, type CanvasSaveStatus } from "@/hooks/use-canvas-autosave";
@@ -320,13 +321,7 @@ function CanvasRoom({
       >
         <div className="relative h-full w-full">
           <ErrorBoundary FallbackComponent={CanvasErrorFallback}>
-            <ClientSideSuspense
-              fallback={
-                <div className="flex h-full w-full items-center justify-center">
-                  <span className="text-sm text-copy-muted">Connecting…</span>
-                </div>
-              }
-            >
+            <ClientSideSuspense fallback={<CanvasConnecting />}>
               <Canvas
                 projectId={roomId}
                 templateFitVersion={templateFitVersion}

@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SpecPreviewSkeleton } from "@/components/loading";
 
 // ---------------------------------------------------------------------------
 // Spec preview dialog (spec 31). Opens when a spec row is selected in the
@@ -105,7 +106,9 @@ export function SpecPreviewDialog({ projectId, specId, onClose }: SpecPreviewDia
         </EditorDialog.Header>
         <ScrollArea className="max-h-[60dvh] pr-4">
           {isLoading ? (
-            <p className="text-sm text-copy-muted">Loading spec…</p>
+            <div role="status" aria-label="Loading spec preview">
+              <SpecPreviewSkeleton />
+            </div>
           ) : errorMessage !== null ? (
             <p role="alert" className="text-sm text-copy-muted">
               {errorMessage}

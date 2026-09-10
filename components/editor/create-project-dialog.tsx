@@ -1,17 +1,16 @@
 "use client";
 
+import { LoaderCircleIcon } from "lucide-react";
+
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { slugify } from "@/lib/projects";
 
 // ---------------------------------------------------------------------------
-// Create project dialog. Controlled by the page-level
-// `useProjectDialogs` hook so the home "New Project" CTA and the sidebar
-// "New Project" button share the same open handler.
-//
-// The slug preview is recomputed from the form name each render. No
-// debounce — the derivation is cheap and only runs while the dialog is open.
+// Create project dialog. Controlled by the workspace UI context so the home
+// "New Project" CTA and the sidebar "New Project" button share the same
+// open handler. Name only — the workspace URL uses the server-generated
+// project id, so no slug preview is shown.
 // ---------------------------------------------------------------------------
 
 type CreateProjectDialogProps = {
@@ -31,7 +30,6 @@ function CreateProjectDialog({
   onFormNameChange,
   onSubmit,
 }: CreateProjectDialogProps) {
-  const slug = slugify(formName);
   return (
     <EditorDialog.Root open={open} onOpenChange={onOpenChange}>
       <EditorDialog.Content>
@@ -55,15 +53,19 @@ function CreateProjectDialog({
             onChange={(event) => onFormNameChange(event.target.value)}
             className="bg-surface text-copy-primary placeholder:text-copy-muted"
           />
-          <p className="text-xs text-copy-muted">
-            Slug: <span className="font-mono text-copy-secondary">{slug || "—"}</span>
-          </p>
           <EditorDialog.Footer>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!formName.trim() || isSubmitting}>
-              Create
+            <Button
+              type="submit"
+              disabled={!formName.trim() || isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? (
+                <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
+              ) : null}
+              {isSubmitting ? "Creating…" : "Create"}
             </Button>
           </EditorDialog.Footer>
         </form>

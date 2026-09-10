@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { EditorDialog } from "@/components/editor/dialog";
 import { Button } from "@/components/ui/button";
 import { CANVAS_TEMPLATES, type CanvasTemplate } from "@/components/editor/starter-templates";
@@ -36,8 +38,10 @@ type StarterTemplatesModalProps = {
 
 function StarterTemplatesModal({ open, onOpenChange, onImported }: StarterTemplatesModalProps) {
   const { loadTemplate, isLoading } = useCanvasTemplateLoad();
+  const [importingId, setImportingId] = useState<string | null>(null);
 
   const handleImport = async (template: CanvasTemplate): Promise<void> => {
+    setImportingId(template.id);
     try {
       await loadTemplate(template);
       onImported();
@@ -45,6 +49,8 @@ function StarterTemplatesModal({ open, onOpenChange, onImported }: StarterTempla
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[starter-templates] failed to import template", error);
+    } finally {
+      setImportingId(null);
     }
   };
 
@@ -68,6 +74,7 @@ function StarterTemplatesModal({ open, onOpenChange, onImported }: StarterTempla
                 template={template}
                 onImport={(t) => void handleImport(t)}
                 disabled={isLoading}
+                isImporting={importingId === template.id}
               />
             ))}
           </div>

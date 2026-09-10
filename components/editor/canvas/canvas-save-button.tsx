@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangleIcon, CheckIcon, Loader2Icon, SaveIcon } from "lucide-react";
+import { AlertTriangleIcon, CheckIcon, LoaderCircleIcon, SaveIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { CanvasSaveStatus } from "@/hooks/use-canvas-autosave";
@@ -22,7 +22,7 @@ type CanvasSaveButtonProps = {
 function CanvasSaveButton({ status, onSave }: CanvasSaveButtonProps) {
   const Icon =
     status === "saving"
-      ? Loader2Icon
+      ? LoaderCircleIcon
       : status === "saved"
         ? CheckIcon
         : status === "error"
@@ -48,7 +48,9 @@ function CanvasSaveButton({ status, onSave }: CanvasSaveButtonProps) {
       title={status === "error" ? "Save failed — click to retry" : "Save canvas now"}
       className={cn(status === "error" && "text-destructive")}
     >
-      <Icon className={cn("h-4 w-4", status === "saving" && "animate-spin")} />
+      <Icon
+        className={cn("h-4 w-4", status === "saving" && "animate-spin motion-reduce:animate-none")}
+      />
       {label}
     </Button>
   );
