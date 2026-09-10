@@ -26,6 +26,19 @@ import {
 } from "@/lib/api/responses";
 import { parseInviteCollaboratorBody } from "@/lib/api/validation";
 import { enrichCollaborators, findUserByEmail, findUserById } from "@/lib/clerk-users";
+import {
+  bumpAccessVersion,
+  cacheDel,
+  cacheGet,
+  cacheSet,
+  collabsCacheKey,
+  COLLABS_TTL_SECONDS,
+} from "@/lib/redis";
+
+type CollaboratorsPayload = {
+  owner: { userId: string; email: string; name: string | null; imageUrl: string | null };
+  collaborators: { id: string; email: string; name: string | null; imageUrl: string | null }[];
+};
 
 type AccessFailure =
   | { kind: "auth" }
@@ -145,6 +158,15 @@ export async function GET(
   const access = await resolveReadAccess(ctx);
   if (access.kind !== "ok") return accessResponse(access);
 
+  // Cache-aside (spec 33): the enriched payload is plain JSON-safe, so the
+  // Clerk lookups below run only on a miss. Fail-open: a miss runs the
+  // existing Prisma/Clerk path with no status-code changes.
+  const key = collabsCacheKey(access.projectId);
+  const cached = await cacheGet<CollaboratorsPayload>(key);
+  if (cached) {
+    return json(cached, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const project = await prisma.project.findUnique({
     where: { id: access.projectId },
     select: { ownerId: true },
@@ -173,7 +195,9 @@ export async function GET(
     };
   });
 
-  return json({ owner, collaborators }, { headers: { "Cache-Control": "no-store" } });
+  const payload: CollaboratorsPayload = { owner, collaborators };
+  await cacheSet(key, payload, COLLABS_TTL_SECONDS);
+  return json(payload, { headers: { "Cache-Control": "no-store" } });
 }
 
 function isPrismaUniqueViolation(error: unknown): boolean {
@@ -219,6 +243,13 @@ export async function POST(
       data: { projectId: access.projectId, email: parsed.value.email },
       select: { id: true, email: true, createdAt: true },
     });
+    // Invalidate (spec 33): the collabs list changed and the invitee's
+    // access generation moved. Fail-open — invalidation never fails the
+    // mutation. The invitee's own `ghost:projects:*` key is unresolvable
+    // here (`findUserByEmail` exposes no Clerk userId); its 60s TTL covers
+    // the gap.
+    await cacheDel(collabsCacheKey(access.projectId));
+    await bumpAccessVersion(access.projectId);
     return json(
       {
         id: created.id,

@@ -18,6 +18,7 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api/responses";
+import { bumpAccessVersion, cacheDel, collabsCacheKey } from "@/lib/redis";
 
 export async function DELETE(
   _request: Request,
@@ -51,6 +52,11 @@ export async function DELETE(
     where: { id: trimmedCollab, projectId: trimmedProject },
   });
   if (result.count === 0) return notFound("Collaborator not found");
+
+  // Invalidate (spec 33): membership changed, so the collabs list and the
+  // access generation move. Fail-open — never fails the mutation.
+  await cacheDel(collabsCacheKey(trimmedProject));
+  await bumpAccessVersion(trimmedProject);
 
   return noContent();
 }

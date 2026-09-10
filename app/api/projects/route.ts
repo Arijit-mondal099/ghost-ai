@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
 import { badRequest, HttpError, json, unauthorized } from "@/lib/api/responses";
 import { parseCreateProjectBody } from "@/lib/api/validation";
+import { cacheDel, projectsCacheKey } from "@/lib/redis";
 
 const PROJECT_SELECT = {
   id: true,
@@ -65,6 +66,9 @@ export async function POST(request: Request): Promise<Response> {
     data: { ownerId: auth.userId, name: parsed.value.name },
     select: PROJECT_SELECT,
   });
+
+  // Invalidate (spec 33): the owner's project list changed. Fail-open.
+  await cacheDel(projectsCacheKey(auth.userId));
 
   return json(project, {
     status: 201,

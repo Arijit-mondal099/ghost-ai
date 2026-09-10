@@ -31,6 +31,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
 import { badRequest, HttpError, json, notFound, unauthorized } from "@/lib/api/responses";
 import { parseSpecSaveBody } from "@/lib/api/validation";
+import { cacheDel, cacheGet, cacheSet, specsCacheKey, SPECS_TTL_SECONDS } from "@/lib/redis";
 
 type AccessFailure = { kind: "auth" } | { kind: "notFound" } | { kind: "badId" };
 type AccessOk = { kind: "ok"; projectId: string };
@@ -137,6 +138,9 @@ export async function POST(
       data: { filePath: blob.url },
       select: { id: true, createdAt: true },
     });
+    // Invalidate (spec 33): a new spec row changed the list. Fail-open —
+    // never fails the mutation.
+    await cacheDel(specsCacheKey(access.projectId));
     return json(
       { id: saved.id, createdAt: saved.createdAt.toISOString() },
       {
@@ -164,15 +168,22 @@ export async function GET(
   const access = await resolveSpecAccess(ctx);
   if (access.kind !== "ok") return accessResponse(access);
 
+  // Cache-aside (spec 33): specs are append-only, so a 120s TTL is safe —
+  // the only writer (POST above) deletes this key. Fail-open.
+  const key = specsCacheKey(access.projectId);
+  const cached = await cacheGet<{ specs: { id: string; createdAt: string }[] }>(key);
+  if (cached) {
+    return json(cached, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const specs = await prisma.projectSpec.findMany({
     where: { projectId: access.projectId },
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true },
   });
-  return json(
-    {
-      specs: specs.map((spec) => ({ id: spec.id, createdAt: spec.createdAt.toISOString() })),
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  const payload = {
+    specs: specs.map((spec) => ({ id: spec.id, createdAt: spec.createdAt.toISOString() })),
+  };
+  await cacheSet(key, payload, SPECS_TTL_SECONDS);
+  return json(payload, { headers: { "Cache-Control": "no-store" } });
 }

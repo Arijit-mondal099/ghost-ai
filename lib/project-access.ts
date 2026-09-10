@@ -12,6 +12,13 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
+import {
+  ACCESS_TTL_SECONDS,
+  accessCacheKey,
+  cacheGet,
+  cacheSet,
+  getAccessVersion,
+} from "@/lib/redis";
 
 export type CurrentIdentity = {
   userId: string;
@@ -47,7 +54,19 @@ export async function getAccessibleProject(
 ): Promise<AccessibleProject | null> {
   if (roomId.trim().length === 0) return null;
 
-  return prisma.project.findFirst({
+  // Cache-aside (spec 33): the key is versioned by the project's access
+  // generation counter, so invite/remove/rename/delete bumps invalidate
+  // without key scans. `version === null` (disabled/down) skips the cache
+  // entirely and falls through to Prisma. Only hits are stored — a null
+  // (no access) is never cached.
+  const version = await getAccessVersion(roomId);
+  const key = version === null ? null : accessCacheKey(roomId, identity.userId, version);
+  if (key) {
+    const cached = await cacheGet<AccessibleProject>(key);
+    if (cached) return cached;
+  }
+
+  const fresh = await prisma.project.findFirst({
     where: {
       id: roomId,
       OR: [
@@ -57,4 +76,9 @@ export async function getAccessibleProject(
     },
     select: { id: true, name: true, ownerId: true },
   });
+
+  if (key && fresh) {
+    await cacheSet(key, fresh, ACCESS_TTL_SECONDS);
+  }
+  return fresh;
 }

@@ -17,6 +17,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
 import { slugify, type Project } from "@/lib/projects";
+import { cacheGet, cacheSet, projectsCacheKey, PROJECTS_TTL_SECONDS } from "@/lib/redis";
 
 export type ProjectsForUser = {
   owned: Project[];
@@ -36,6 +37,13 @@ export async function getProjectsForCurrentUser(): Promise<ProjectsForUser> {
     .map((ea) => ea.emailAddress.toLowerCase())
     .filter((address) => address.length > 0);
   const email = emails[0] ?? "";
+
+  // Cache-aside (spec 33): keyed by Clerk userId, which uniquely identifies
+  // the viewer, so one user can never read another's cached row. Fail-open:
+  // a miss (or disabled/down Redis) runs the Prisma queries below.
+  const key = projectsCacheKey(userId);
+  const cached = await cacheGet<ProjectsForUser>(key);
+  if (cached) return cached;
 
   const [ownedRows, sharedRows] = await Promise.all([
     prisma.project.findMany({
@@ -68,5 +76,7 @@ export async function getProjectsForCurrentUser(): Promise<ProjectsForUser> {
     isOwner: false,
   }));
 
-  return { owned, shared };
+  const result: ProjectsForUser = { owned, shared };
+  await cacheSet(key, result, PROJECTS_TTL_SECONDS);
+  return result;
 }
