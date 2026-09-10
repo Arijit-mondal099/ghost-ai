@@ -46,3 +46,24 @@ export const notFound = (message = "Resource not found") => errorBody(404, "NOT_
 export const badRequest = (code: string, message: string) => errorBody(400, code, message);
 
 export const noContent = (): Response => new Response(null, { status: 204 });
+
+export const rateLimited = (
+  limit: number,
+  remaining: number,
+  resetMs: number,
+  retryAfterSec?: number,
+): Response => {
+  const retryAfter = retryAfterSec ?? Math.max(1, Math.ceil((resetMs - Date.now()) / 1000));
+  return json(
+    { error: { code: "RATE_LIMITED", message: "Too many requests, please retry shortly" } },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(retryAfter),
+        "X-RateLimit-Limit": String(limit),
+        "X-RateLimit-Remaining": String(remaining),
+        "X-RateLimit-Reset": String(resetMs),
+      },
+    },
+  );
+};
