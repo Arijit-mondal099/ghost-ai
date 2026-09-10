@@ -29,6 +29,12 @@ import { useDesignAgent } from "@/hooks/use-design-agent";
 // drives the input-disabled/spinner lifecycle, and the `AI_STATUS` feed text
 // drives the status strip. Canvas updates need no code here:
 // `useLiveblocksFlow` reflects the task's Storage writes automatically.
+//
+// Specs is generation + list (spec 32): the tab snapshots the canvas graph
+// one-shot from room storage, sends it with the chat feed through
+// `useSpecGeneration` (trigger → token → realtime output → save route →
+// list refresh). Progress is requester-local — the task broadcasts no room
+// feed and posts no Ghost message.
 // ---------------------------------------------------------------------------
 
 function AISidebarTabs({ projectId, roomId }: AISidebarTabsProps) {
@@ -90,7 +96,7 @@ function AISidebarTabs({ projectId, roomId }: AISidebarTabsProps) {
       </TabsContent>
 
       <TabsContent value="specs" className="mt-0 flex flex-1 flex-col overflow-hidden">
-        <SpecsTab />
+        <SpecsTab projectId={projectId} roomId={roomId} messages={messages} />
       </TabsContent>
     </Tabs>
   );
