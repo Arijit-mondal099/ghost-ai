@@ -28,6 +28,7 @@
     "@prisma/client": "^7.8.0",
     "@trigger.dev/react-hooks": "4.5.16",
     "@trigger.dev/sdk": "4.5.16",
+    "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.4",
     "@vercel/blob": "^2.8.0",
     "@xyflow/react": "^12.11.6",
