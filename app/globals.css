@@ -192,3 +192,85 @@
     @apply font-sans;
   }
 }
+
+/*
+  Signature drafting sweep for the canvas connecting state. A slow
+  warm-cream light pass clipped to the node row — a schematic being drawn.
+  Respects reduced motion via the media query below.
+*/
+@keyframes ghost-draft-sweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(320%);
+    opacity: 0;
+  }
+}
+
+.ghost-draft-sweep {
+  overflow: hidden;
+}
+
+.ghost-draft-sweep::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 72px;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    var(--accent-primary-dim) 35%,
+    color-mix(in srgb, var(--accent-primary) 38%, transparent) 50%,
+    var(--accent-primary-dim) 65%,
+    transparent 100%
+  );
+  filter: blur(6px);
+  animation: ghost-draft-sweep 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost-draft-sweep::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/*
+  Node-dot drafting pulse for Ghost runs (Architect status, spec progress).
+  Three dots light left→right in sequence via staggered delays — nodes being
+  placed on the blueprint. Static mid-tone dots under reduced motion.
+*/
+@keyframes ghost-node-blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.ghost-node-dot {
+  animation: ghost-node-blink 1.6s ease-in-out infinite;
+}
+
+.ghost-node-dot:nth-child(2) {
+  animation-delay: 0.25s;
+}
+
+.ghost-node-dot:nth-child(3) {
+  animation-delay: 0.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost-node-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
