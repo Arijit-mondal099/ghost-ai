@@ -25,8 +25,11 @@ import { AI_CHAT_CONTENT_MAX_LENGTH, type AiChatFeedPayload } from "@/types/task
 // progress is requester-local and no Ghost chat message is posted. On top:
 // a run-identity guard (the hook's SWR cache would otherwise replay the
 // previous run's terminal into a new run), a watchdog that resubscribes
-// after 45s without run data (long-quiet SSE streams die silently), and
-// surfacing of subscription-level errors instead of hanging on Generating.
+// after 45s without run data (long-quiet SSE streams die silently),
+// surfacing of subscription-level errors instead of hanging on Generating,
+// and an absolute 6-minute timeout — resubscribing a server-stalled run
+// replays EXECUTING forever, so the timeout is the only exit that can't
+// be replayed away.
 //
 // Deliberate deviation from the realtime skill: the subscription keeps the
 // `output` column (no `skipColumns`). The skill's skip guidance assumes
@@ -60,6 +63,14 @@ const REALTIME_ACTIVE_STATUSES: ReadonlySet<string> = new Set([
   "FROZEN",
   "DELAYED",
 ]);
+
+// Absolute ceiling for one generation: resubscribing a still-EXECUTING run
+// replays EXECUTING forever, so without this a server-side stall (Groq
+// hanging inside its SDK timeout, a dead worker) pins the UI on
+// "Generating spec…" with no exit. Paired with the per-attempt Groq
+// timeout in `trigger/generate-spec.ts` (3 × 90s + backoff ≈ 4.6 min), so
+// a healthy run always finishes first and only a true stall hits this.
+const SPEC_RUN_TIMEOUT_MS = 6 * 60 * 1000;
 
 type FlowLive = {
   nodes: LiveMap<string, LiveObject<Record<string, Lson>>>;
@@ -156,8 +167,14 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
   const lastUpdateRef = useRef<number | null>(null);
   // Records the runId already handled to completion. Realtime re-delivery
   // of a terminal run (or a StrictMode double-effect) must not persist a
-  // second spec. Cleared when a new run starts.
+  // second spec. Any non-null value blocks handling: terminal branches store
+  // the run id, the absolute timeout stores a sentinel — a late terminal
+  // arriving after the timeout must not save. Cleared when a new run starts.
   const emittedRef = useRef<string | null>(null);
+  // Absolute-timeout timer for the in-flight run. Cleared centrally when the
+  // stage settles (effect below) and on unmount — never at individual exit
+  // points, so no terminal path can leak it.
+  const timeoutRef = useRef<number | null>(null);
   const onSavedRef = useRef(onSaved);
   useEffect(() => {
     onSavedRef.current = onSaved;
@@ -210,7 +227,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
   useEffect(() => {
     if (!subscribed || stage !== "working" || runId === null) return;
     if (!realtimeError) return;
-    if (emittedRef.current === runId) return;
+    if (emittedRef.current !== null) return;
     emittedRef.current = runId;
     console.error("Spec run subscription failed", realtimeError);
     setStage("error");
@@ -219,11 +236,28 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     setPublicToken(null);
   }, [subscribed, stage, runId, realtimeError]);
 
+  // Central timer cleanup: any settled stage (error after a failure, idle
+  // after a save) disarms the absolute timeout, so terminal branches never
+  // manage the timer themselves. Unmount clears it too.
+  useEffect(() => {
+    if (stage !== "error" && stage !== "idle") return;
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, [stage]);
+  useEffect(
+    () => () => {
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+
   // Completion effect: terminal run status → persist output or report.
   useEffect(() => {
     if (realtimeStatus === undefined) return;
     if (REALTIME_ACTIVE_STATUSES.has(realtimeStatus)) return;
-    if (runId === null || emittedRef.current === runId) return;
+    if (runId === null || emittedRef.current !== null) return;
     if (stage !== "working") return;
     if (realtimeStatus !== "COMPLETED") {
       emittedRef.current = runId;
@@ -280,6 +314,21 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     // new run (the identity guard above still filters stale cache).
     lastUpdateRef.current = Date.now();
     setSubscriptionKey(0);
+    // Absolute ceiling: a server-side stall (provider hanging, dead worker)
+    // replays EXECUTING through every resubscribe, so without this the UI
+    // pins on "Generating spec…" forever. Fires only if no terminal path
+    // claimed the run first (sentinel blocks late terminals from saving);
+    // disarmed by the stage-settle effect above.
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => {
+      if (emittedRef.current !== null) return;
+      emittedRef.current = "timeout";
+      console.error("Spec run timed out without a terminal status");
+      setStage("error");
+      setStatusMessage("Spec run timed out after 6 minutes. Try again.");
+      setRunId(null);
+      setPublicToken(null);
+    }, SPEC_RUN_TIMEOUT_MS);
     // One-shot graph snapshot: read (never subscribe) the `flow` LiveObject
     // via the room, with the same LSON-cast-at-the-boundary pattern as
     // `use-canvas-template-load`. `toJSON()` deep-converts to plain JSON —

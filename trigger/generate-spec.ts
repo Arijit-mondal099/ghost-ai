@@ -244,7 +244,11 @@ export const generateSpec = task({
     try {
       const groqKey = process.env["GROQ_API_KEY"];
       if (!groqKey) throw new Error("GROQ_API_KEY is not set");
-      groq = new Groq({ apiKey: groqKey });
+      // Bound each attempt: the SDK default is 10 minutes, so a stalled
+      // provider call would pin the client's run on EXECUTING past any
+      // reasonable wait (3 attempts ≈ 30 min). 90s × 3 + backoff ≈ 4.6 min
+      // worst case, inside the client's 6-minute absolute timeout.
+      groq = new Groq({ apiKey: groqKey, timeout: 90_000 });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error("generate-spec missing credentials", { error: message });
