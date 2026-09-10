@@ -1,0 +1,17 @@
+// ---------------------------------------------------------------------------
+// Generated spec metadata (spec 30). One row per persisted Markdown spec.
+// The actual Markdown content lives in Vercel Blob at the deterministic
+// pathname `specs/{projectId}/{specId}.md`; `filePath` stores the Blob URL
+// as the reference — the same metadata + blob split as `canvasJsonPath`.
+// ---------------------------------------------------------------------------
+
+model ProjectSpec {
+  id        String   @id @default(cuid())
+  projectId String
+  filePath  String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
