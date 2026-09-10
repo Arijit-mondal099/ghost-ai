@@ -19,6 +19,13 @@ import {
   unauthorized,
 } from "@/lib/api/responses";
 import { parseRenameProjectBody } from "@/lib/api/validation";
+import {
+  bumpAccessVersion,
+  cacheDel,
+  collabsCacheKey,
+  projectsCacheKey,
+  specsCacheKey,
+} from "@/lib/redis";
 
 const PROJECT_SELECT = {
   id: true,
@@ -111,6 +118,13 @@ export async function PATCH(
     select: PROJECT_SELECT,
   });
 
+  // Invalidate (spec 33): the name feeds project lists (and the workspace
+  // shell), so the owner's list, the access generation, and the collabs
+  // payload all move. Fail-open — never fails the mutation.
+  await cacheDel(projectsCacheKey(userId));
+  await bumpAccessVersion(projectId);
+  await cacheDel(collabsCacheKey(projectId));
+
   return json(updated);
 }
 
@@ -126,6 +140,12 @@ export async function DELETE(
   if (ownership.kind !== "ok") return ownershipResponse(ownership);
 
   await prisma.project.delete({ where: { id: projectId } });
+
+  // Invalidate (spec 33): the project is gone, so its list entry, access
+  // generation, collabs payload, and specs list all move. Fail-open.
+  await cacheDel(projectsCacheKey(userId));
+  await bumpAccessVersion(projectId);
+  await cacheDel(collabsCacheKey(projectId), specsCacheKey(projectId));
 
   return noContent();
 }
