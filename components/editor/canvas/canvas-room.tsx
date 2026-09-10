@@ -16,7 +16,7 @@ import { LiveblocksProvider, RoomProvider } from "@liveblocks/react";
 import { LiveObject } from "@liveblocks/client";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { TrashIcon } from "lucide-react";
 
 import { AiPresenceOverlay } from "@/components/editor/canvas/ai-presence-overlay";
@@ -27,6 +27,7 @@ import { CanvasNode as CanvasNodeRenderer } from "@/components/editor/canvas/can
 import { CanvasTemplateFitOnLoad } from "@/components/editor/canvas/canvas-template-fit-on-load";
 import { LiveCursors } from "@/components/editor/canvas/live-cursors";
 import { PresenceAvatars } from "@/components/editor/canvas/presence-avatars";
+import { RateLimitOverlay } from "@/components/editor/canvas/rate-limit-overlay";
 import { ShapeDragPreview } from "@/components/editor/canvas/shape-drag-preview";
 import { ShapePanel } from "@/components/editor/canvas/shape-panel";
 import { useCanvasDelete } from "@/hooks/use-canvas-delete";
@@ -265,8 +266,46 @@ function CanvasRoom({
   // not echoed straight back to Blob. Created here (outside suspense) so the
   // ref identity is stable across storage reconnects.
   const restoreGuard = useRef(false);
+  // Rate-limit state for the Liveblocks auth endpoint (spec 35). A 429 is
+  // retryable as far as the Liveblocks client is concerned, so with the
+  // default string endpoint the room would retry silently forever behind
+  // the "Connecting…" fallback. The custom `authEndpoint` below captures
+  // the 429, and this state drives the overlay + the UI-owned retry
+  // schedule instead.
+  const [rateLimit, setRateLimit] = useState<{ retryAfterSec: number; at: number } | null>(null);
+  // Bumped on every manual/auto retry: remounts the provider stack for a
+  // fresh client + fresh auth attempt, and clears the overlay.
+  const [attempt, setAttempt] = useState(0);
+
+  const authEndpoint = useCallback(
+    async (room?: string): Promise<{ token: string } | { error: "forbidden"; reason: string }> => {
+      const res = await fetch("/api/liveblocks-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room }),
+      });
+      if (res.status === 429) {
+        const retryAfterSec = Math.max(1, parseInt(res.headers.get("Retry-After") ?? "", 10) || 60);
+        setRateLimit({ retryAfterSec, at: Date.now() });
+        // "forbidden" stops the client's silent retry loop (StopRetrying
+        // path) — the overlay below owns the retry schedule from here.
+        return { error: "forbidden", reason: "rate-limited" };
+      }
+      if (!res.ok) throw new Error(`Liveblocks auth failed (${res.status})`);
+      // The route passes the SDK's `{ token }` body through verbatim.
+      const data = (await res.json()) as { token: string };
+      return { token: data.token };
+    },
+    [],
+  );
+
+  const retryAuth = useCallback(() => {
+    setRateLimit(null);
+    setAttempt((a) => a + 1);
+  }, []);
+
   return (
-    <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
+    <LiveblocksProvider authEndpoint={authEndpoint} key={attempt}>
       <RoomProvider
         id={roomId}
         initialPresence={{ cursor: null, isThinking: false }}
@@ -279,23 +318,32 @@ function CanvasRoom({
           }),
         }}
       >
-        <ErrorBoundary FallbackComponent={CanvasErrorFallback}>
-          <ClientSideSuspense
-            fallback={
-              <div className="flex h-full w-full items-center justify-center">
-                <span className="text-sm text-copy-muted">Connecting…</span>
-              </div>
-            }
-          >
-            <Canvas
-              projectId={roomId}
-              templateFitVersion={templateFitVersion}
-              saveRequestVersion={saveRequestVersion ?? 0}
-              restoreGuard={restoreGuard}
-              onSaveStatusChange={onSaveStatusChange}
+        <div className="relative h-full w-full">
+          <ErrorBoundary FallbackComponent={CanvasErrorFallback}>
+            <ClientSideSuspense
+              fallback={
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="text-sm text-copy-muted">Connecting…</span>
+                </div>
+              }
+            >
+              <Canvas
+                projectId={roomId}
+                templateFitVersion={templateFitVersion}
+                saveRequestVersion={saveRequestVersion ?? 0}
+                restoreGuard={restoreGuard}
+                onSaveStatusChange={onSaveStatusChange}
+              />
+            </ClientSideSuspense>
+          </ErrorBoundary>
+          {rateLimit !== null && (
+            <RateLimitOverlay
+              key={rateLimit.at}
+              retryAfterSec={rateLimit.retryAfterSec}
+              onRetry={retryAuth}
             />
-          </ClientSideSuspense>
-        </ErrorBoundary>
+          )}
+        </div>
         {children}
       </RoomProvider>
     </LiveblocksProvider>
