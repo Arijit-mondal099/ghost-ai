@@ -218,6 +218,20 @@ export const generateSpec = task({
       logger.error("generate-spec rejected: malformed payload");
       return { ok: false, error: "roomId, projectId, chatHistory, nodes, and edges are required" };
     }
+    // Same bounds as SPEC_GRAPH_MAX_NODES / SPEC_GRAPH_MAX_EDGES enforced by
+    // the route validator (duplicated — this bundle has no `@/` alias).
+    // Reject instead of truncating: the prompt contract covers every node
+    // and edge, so silently dropping accepted elements is a correctness bug.
+    if (nodes.length > GRAPH_NODE_LIMIT || edges.length > GRAPH_EDGE_LIMIT) {
+      logger.error("generate-spec rejected: graph exceeds limits", {
+        nodes: nodes.length,
+        edges: edges.length,
+      });
+      return {
+        ok: false,
+        error: `nodes must have at most ${GRAPH_NODE_LIMIT} entries and edges at most ${GRAPH_EDGE_LIMIT}`,
+      };
+    }
 
     let groq: Groq;
     try {
@@ -271,6 +285,13 @@ export const generateSpec = task({
           const content = (choice?.message?.content ?? "").trim();
           contentPreview = content.length > 200 ? `${content.slice(0, 200)}…` : content;
           if (!content) throw new Error("model returned empty content");
+          if (finishReason === "length") {
+            // Hit the output token ceiling: the draft is cut off mid-spec.
+            // Retrying the same prompt would truncate again, so fail fast —
+            // `friendlyGroqError` reports the cutoff distinctly below.
+            lastError = "finish_reason=length";
+            break;
+          }
           markdown = content;
           break;
         } catch (error) {
