@@ -21,8 +21,10 @@ import {
   HttpError,
   json,
   notFound,
+  rateLimited,
   unauthorized,
 } from "@/lib/api/responses";
+import { checkRateLimit, resolveRateLimitIdentifier } from "@/lib/ratelimit";
 import { parseAssistantMessageBody } from "@/lib/api/validation";
 import { AI_CHAT_GHOST_SENDER_ID } from "@/types/tasks";
 
@@ -33,6 +35,14 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof HttpError) return unauthorized();
     throw error;
+  }
+
+  // Rate-limit before any validation or billable work: 401s never consume
+  // quota, and abuse never reaches Prisma/Liveblocks. Fail-open — Redis-down
+  // allows the request.
+  const assistantLimit = await checkRateLimit("ai", resolveRateLimitIdentifier(userId, request));
+  if (!assistantLimit.ok) {
+    return rateLimited(assistantLimit.limit, assistantLimit.remaining, assistantLimit.reset);
   }
 
   let body: unknown;

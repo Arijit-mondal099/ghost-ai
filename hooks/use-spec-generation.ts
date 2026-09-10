@@ -78,16 +78,25 @@ type FlowLive = {
 };
 
 async function readErrorMessage(response: Response): Promise<string> {
+  let message: string | null = null;
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null && "error" in body) {
       const error = (body as { error?: { message?: unknown } }).error;
-      if (typeof error?.message === "string" && error.message.trim()) return error.message;
+      if (typeof error?.message === "string" && error.message.trim()) message = error.message;
     }
   } catch {
     // Fall through to the status fallback below.
   }
-  return `Request failed (${response.status})`;
+  if (message === null) message = `Request failed (${response.status})`;
+  // Surface the server's retry timing on rate limits so the user knows
+  // when to retry (spec 35).
+  if (response.status === 429) {
+    const retry = response.headers.get("Retry-After");
+    const secs = retry !== null ? Math.max(1, parseInt(retry, 10) || 60) : null;
+    if (secs !== null) return `${message} (retry in ${secs}s)`;
+  }
+  return message;
 }
 
 function readToken(body: unknown): string | null {

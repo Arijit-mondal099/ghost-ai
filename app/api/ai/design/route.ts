@@ -24,7 +24,15 @@ import { runs, tasks } from "@trigger.dev/sdk";
 
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
-import { badRequest, HttpError, json, notFound, unauthorized } from "@/lib/api/responses";
+import {
+  badRequest,
+  HttpError,
+  json,
+  notFound,
+  rateLimited,
+  unauthorized,
+} from "@/lib/api/responses";
+import { checkRateLimit, resolveRateLimitIdentifier } from "@/lib/ratelimit";
 import { parseDesignTriggerBody } from "@/lib/api/validation";
 import type { designAgent } from "@/trigger/design-agent";
 
@@ -42,6 +50,14 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof HttpError) return unauthorized();
     throw error;
+  }
+
+  // Rate-limit before any validation or billable work: 401s never consume
+  // quota, and abuse never reaches Prisma/Trigger. Fail-open — Redis-down
+  // allows the request.
+  const designLimit = await checkRateLimit("ai", resolveRateLimitIdentifier(userId, request));
+  if (!designLimit.ok) {
+    return rateLimited(designLimit.limit, designLimit.remaining, designLimit.reset);
   }
 
   let body: unknown;

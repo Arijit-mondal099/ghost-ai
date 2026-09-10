@@ -18,7 +18,8 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 
-import { badRequest, forbidden, unauthorized } from "@/lib/api/responses";
+import { badRequest, forbidden, rateLimited, unauthorized } from "@/lib/api/responses";
+import { checkRateLimit, resolveRateLimitIdentifier } from "@/lib/ratelimit";
 import { liveblocks, cursorColorForUserId } from "@/lib/liveblocks";
 import {
   getAccessibleProject,
@@ -67,6 +68,16 @@ export async function POST(request: Request): Promise<Response> {
   const access = await resolveAccess(body);
   if (access.kind !== "ok") return accessResponse(access);
   const { roomId, identity } = access;
+
+  // Rate-limit room-join spam before any Prisma/Liveblocks call: 401s and
+  // bad bodies never consume quota. Fail-open — Redis-down allows the request.
+  const liveblocksLimit = await checkRateLimit(
+    "liveblocks",
+    resolveRateLimitIdentifier(identity.userId, request),
+  );
+  if (!liveblocksLimit.ok) {
+    return rateLimited(liveblocksLimit.limit, liveblocksLimit.remaining, liveblocksLimit.reset);
+  }
 
   // 3. Verify project access. `getAccessibleProject` collapses missing
   // projects and unauthorized users into a single null; the spec requires

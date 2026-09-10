@@ -8,6 +8,7 @@ export { CanvasRoom, type CanvasRoomProps } from "./canvas/canvas-room";
 export { CanvasSaveButton, type CanvasSaveButtonProps } from "./canvas/canvas-save-button";
 export { LiveCursors } from "./canvas/live-cursors";
 export { PresenceAvatars } from "./canvas/presence-avatars";
+export { RateLimitOverlay, type RateLimitOverlayProps } from "./canvas/rate-limit-overlay";
 export { ShapeDragPreview } from "./canvas/shape-drag-preview";
 export { ShapePanel } from "./canvas/shape-panel";
 export { CreateProjectDialog, type CreateProjectDialogProps } from "./create-project-dialog";
