@@ -25,8 +25,10 @@ import {
   HttpError,
   json,
   notFound,
+  rateLimited,
   unauthorized,
 } from "@/lib/api/responses";
+import { checkRateLimit, resolveRateLimitIdentifier } from "@/lib/ratelimit";
 import { parseDesignTokenBody } from "@/lib/api/validation";
 
 function tokenUnavailable(): Response {
@@ -43,6 +45,14 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof HttpError) return unauthorized();
     throw error;
+  }
+
+  // Token fetches share the `ai` budget with the generations they authorize:
+  // 401s never consume quota, and abuse never reaches Prisma/Trigger.
+  // Fail-open — Redis-down allows the request.
+  const designTokenLimit = await checkRateLimit("ai", resolveRateLimitIdentifier(userId, request));
+  if (!designTokenLimit.ok) {
+    return rateLimited(designTokenLimit.limit, designTokenLimit.remaining, designTokenLimit.reset);
   }
 
   let body: unknown;
