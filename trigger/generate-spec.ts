@@ -303,14 +303,18 @@ export const generateSpec = task({
               // Full draft overflowed the output budget — retry once with a
               // brevity-constrained prompt instead of failing outright. Sleep
               // out Groq's per-minute output-token window first so the retry
-              // itself isn't rate-limited.
+              // itself isn't rate-limited, heartbeating metadata on the way
+              // so the realtime stream carries traffic (long-quiet SSE
+              // connections get killed) and the run stays visibly alive.
               compactMode = true;
               logger.info("generate-spec retrying in compact mode", {
                 attempt,
                 finishReason,
               });
-              metadata.set("progress", 0.5);
-              await sleep(60_000);
+              for (let waited = 0; waited < 60_000; waited += 15_000) {
+                await sleep(15_000);
+                metadata.set("progress", 0.2 + (0.3 * (waited + 15_000)) / 60_000);
+              }
               continue;
             }
             // Compact draft still cut off: the canvas genuinely exceeds what

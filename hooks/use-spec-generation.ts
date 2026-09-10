@@ -22,7 +22,11 @@ import { AI_CHAT_CONTENT_MAX_LENGTH, type AiChatFeedPayload } from "@/types/task
 // Structure mirrors `use-design-agent.ts` (trigger → token → realtime →
 // terminal effect with an emission guard for StrictMode), minus the
 // `AI_STATUS` feed — `generate-spec` never broadcasts room events, so
-// progress is requester-local and no Ghost chat message is posted.
+// progress is requester-local and no Ghost chat message is posted. On top:
+// a run-identity guard (the hook's SWR cache would otherwise replay the
+// previous run's terminal into a new run), a watchdog that resubscribes
+// after 45s without run data (long-quiet SSE streams die silently), and
+// surfacing of subscription-level errors instead of hanging on Generating.
 //
 // Deliberate deviation from the realtime skill: the subscription keeps the
 // `output` column (no `skipColumns`). The skill's skip guidance assumes
@@ -144,6 +148,12 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [publicToken, setPublicToken] = useState<string | null>(null);
+  // Bumped by the watchdog to force a fresh realtime subscription (see
+  // below); each key gets a fresh SWR namespace inside the hook.
+  const [subscriptionKey, setSubscriptionKey] = useState(0);
+  // Last time the realtime stream delivered run data. Null until the first
+  // update for the current subscription — drives the watchdog below.
+  const lastUpdateRef = useRef<number | null>(null);
   // Records the runId already handled to completion. Realtime re-delivery
   // of a terminal run (or a StrictMode double-effect) must not persist a
   // second spec. Cleared when a new run starts.
@@ -154,18 +164,60 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
   }, [onSaved]);
 
   const subscribed = runId !== null && publicToken !== null;
-  const { run: realtimeRun } = useRealtimeRun(runId ?? undefined, {
+  const { run: realtimeRun, error: realtimeError } = useRealtimeRun(runId ?? undefined, {
     accessToken: publicToken ?? undefined,
     enabled: subscribed,
+    id: `spec-gen-${subscriptionKey}`,
   });
   // Only trust realtime state while subscribed — the hook caches the
-  // last-seen run, and a stale terminal must not fire after teardown.
-  const realtimeStatus: string | undefined = subscribed
-    ? (realtimeRun as { status?: string } | undefined)?.status
-    : undefined;
-  const realtimeOutput: unknown = subscribed
-    ? (realtimeRun as { output?: unknown } | undefined)?.output
-    : undefined;
+  // last-seen run in SWR, and a stale terminal must not fire after teardown.
+  // The cache is also keyed per hook instance, so a new run briefly sees the
+  // previous run's terminal state before its own events arrive: ignore data
+  // whose run id doesn't match (a second generation would otherwise persist
+  // the first run's Markdown and ignore its own).
+  const runIdentity = (realtimeRun as { id?: unknown } | undefined)?.id;
+  const currentRun =
+    subscribed && (typeof runIdentity !== "string" || runIdentity === runId)
+      ? realtimeRun
+      : undefined;
+  const realtimeStatus: string | undefined = (currentRun as { status?: string } | undefined)
+    ?.status;
+  const realtimeOutput: unknown = (currentRun as { output?: unknown } | undefined)?.output;
+
+  useEffect(() => {
+    if (currentRun !== undefined && runId !== null) lastUpdateRef.current = Date.now();
+  }, [currentRun, runId]);
+
+  // Watchdog: the SSE stream can die silently (proxies/NATs kill long-quiet
+  // connections — the 60s compact-retry wait is one such silence), leaving
+  // the UI on "Generating spec…" forever. If no run data arrives for 45s,
+  // force a fresh subscription; the server replays current state on
+  // subscribe, so the terminal is eventually observed.
+  useEffect(() => {
+    if (!subscribed || stage !== "working") return;
+    const timer = setInterval(() => {
+      if (lastUpdateRef.current !== null && Date.now() - lastUpdateRef.current > 45_000) {
+        lastUpdateRef.current = Date.now();
+        setSubscriptionKey((key) => key + 1);
+      }
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [subscribed, stage, runId]);
+
+  // Subscription-level failure (auth/network): the hook reports it via
+  // `error` while the run state stays stale — surface it instead of hanging
+  // on "Generating spec…".
+  useEffect(() => {
+    if (!subscribed || stage !== "working" || runId === null) return;
+    if (!realtimeError) return;
+    if (emittedRef.current === runId) return;
+    emittedRef.current = runId;
+    console.error("Spec run subscription failed", realtimeError);
+    setStage("error");
+    setStatusMessage("Lost connection to the spec run. Try again.");
+    setRunId(null);
+    setPublicToken(null);
+  }, [subscribed, stage, runId, realtimeError]);
 
   // Completion effect: terminal run status → persist output or report.
   useEffect(() => {
@@ -223,6 +275,11 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     setStage("working");
     setStatusMessage("Preparing canvas snapshot…");
     emittedRef.current = null;
+    // Arm the watchdog from dispatch time so even a stream that never
+    // delivers is resubscribed; reset the subscription namespace for the
+    // new run (the identity guard above still filters stale cache).
+    lastUpdateRef.current = Date.now();
+    setSubscriptionKey(0);
     // One-shot graph snapshot: read (never subscribe) the `flow` LiveObject
     // via the room, with the same LSON-cast-at-the-boundary pattern as
     // `use-canvas-template-load`. `toJSON()` deep-converts to plain JSON —
