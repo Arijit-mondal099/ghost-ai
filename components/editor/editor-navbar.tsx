@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
+import Link from "next/link";
+import { CrownIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,12 @@ function EditorNavbar({
       </div>
       <div className="flex flex-1 items-center justify-end gap-2">
         {rightActions}
+        <Button variant="ghost" size="sm" asChild aria-label="View plans and upgrade">
+          <Link href="/pricing">
+            <CrownIcon />
+            <span className="hidden sm:inline">Pricing</span>
+          </Link>
+        </Button>
         {showUserButton ? (
           <UserButton
             appearance={authAppearance}

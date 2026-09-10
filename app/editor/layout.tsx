@@ -1,5 +1,5 @@
 import { WorkspaceShell } from "@/components/editor/workspace-shell";
-import { getProjectsForCurrentUser } from "@/lib/projects-data";
+import { getBillingSummaryForCurrentUser, getProjectsForCurrentUser } from "@/lib/projects-data";
 
 // ---------------------------------------------------------------------------
 // Editor layout. Server component: fetches the user's projects once via
@@ -17,10 +17,17 @@ import { getProjectsForCurrentUser } from "@/lib/projects-data";
 // ---------------------------------------------------------------------------
 
 async function EditorLayout({ children }: { children: React.ReactNode }) {
-  const { owned, shared } = await getProjectsForCurrentUser();
+  const [{ owned, shared }, billing] = await Promise.all([
+    getProjectsForCurrentUser(),
+    getBillingSummaryForCurrentUser(),
+  ]);
   const projects = [...owned, ...shared];
 
-  return <WorkspaceShell projects={projects}>{children}</WorkspaceShell>;
+  return (
+    <WorkspaceShell projects={projects} billing={billing}>
+      {children}
+    </WorkspaceShell>
+  );
 }
 
 export default EditorLayout;

@@ -20,6 +20,11 @@ export { ProjectSidebar, type ProjectSidebarProps } from "./project-sidebar";
 export { RenameProjectDialog, type RenameProjectDialogProps } from "./rename-project-dialog";
 export { ShareProjectDialog, type ShareProjectDialogProps } from "./share-project-dialog";
 export {
+  UpgradePlanDialog,
+  type UpgradeInfo,
+  type UpgradePlanDialogProps,
+} from "./upgrade-plan-dialog";
+export {
   CANVAS_TEMPLATES,
   type CanvasTemplate,
   type TemplateEdge,
