@@ -27,3 +27,5 @@ export {
 } from "./starter-templates";
 export { StarterTemplateCard, type StarterTemplateCardProps } from "./starter-template-card";
 export { StarterTemplatesModal, type StarterTemplatesModalProps } from "./starter-templates-modal";
+export { WorkspaceUIProvider, useWorkspaceUI, type WorkspaceUIValue } from "./workspace-ui-context";
+export { WorkspaceShell, type WorkspaceShellProps } from "./workspace-shell";
