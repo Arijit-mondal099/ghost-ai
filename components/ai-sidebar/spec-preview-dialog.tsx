@@ -112,7 +112,24 @@ export function SpecPreviewDialog({ projectId, specId, onClose }: SpecPreviewDia
             </p>
           ) : markdown !== null ? (
             <div className="flex flex-col gap-3 text-sm leading-relaxed text-copy-primary [&_h1]:text-lg [&_h1]:font-medium [&_h2]:text-base [&_h2]:font-medium [&_h3]:text-sm [&_h3]:font-medium [&_a]:text-brand [&_a]:underline [&_code]:rounded [&_code]:bg-elevated [&_code]:px-1 [&_code]:font-mono [&_code]:text-[13px] [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:border [&_pre]:border-surface-border [&_pre]:bg-elevated [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:w-full [&_table]:text-xs [&_td]:border [&_td]:border-surface-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-surface-border [&_th]:bg-elevated [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // Spec Markdown is saver-controlled but rendered in every
+                  // viewer's browser — a remote `![alt](https://...)` would
+                  // fire an external request on each preview open (tracking
+                  // pixel). Never load images; show the alt text instead.
+                  img: ({ alt }) => (
+                    <span className="text-copy-muted">
+                      {typeof alt === "string" && alt.length > 0
+                        ? `[image: ${alt}]`
+                        : "[image omitted]"}
+                    </span>
+                  ),
+                }}
+              >
+                {markdown}
+              </ReactMarkdown>
             </div>
           ) : null}
         </ScrollArea>

@@ -74,7 +74,13 @@ export function useProjectSpecs({ projectId }: UseProjectSpecsArgs): UseProjectS
     }
   }, [projectId]);
 
+  // `refresh` is memoized on `projectId`, so this only re-runs when the
+  // project changes (manual `refresh()` calls bypass it — no flicker on
+  // retry). Drop the previous project's rows first: otherwise the tab
+  // renders stale rows for the new project, and a failed request would
+  // leave them in place.
   useEffect(() => {
+    setSpecs([]);
     void refresh();
   }, [refresh]);
 

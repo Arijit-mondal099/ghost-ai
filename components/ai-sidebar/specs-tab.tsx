@@ -55,9 +55,7 @@ function SpecsTab({
     projectId,
     roomId,
     messages,
-    onSaved: () => {
-      void refresh();
-    },
+    onSaved: () => refresh(),
   });
 
   const generateLabel =
@@ -91,6 +89,11 @@ function SpecsTab({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
+        {errorMessage !== null && specs.length > 0 ? (
+          <p role="alert" className="pb-2 text-xs text-copy-muted">
+            {errorMessage}
+          </p>
+        ) : null}
         {isLoading && specs.length === 0 ? (
           <p className="text-sm text-copy-muted">Loading specs…</p>
         ) : errorMessage !== null && specs.length === 0 ? (
