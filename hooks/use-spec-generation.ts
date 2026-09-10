@@ -45,6 +45,11 @@ import { AI_CHAT_CONTENT_MAX_LENGTH, type AiChatFeedPayload } from "@/types/task
 
 type SpecGenStage = "idle" | "working" | "saving" | "done" | "error";
 
+// Phase within a run for the progress rail: snapshot the canvas graph,
+// draft the Markdown, save the draft. Distinct from `stage` (which the
+// button + error paths read) so the rail can label each true sequence step.
+type SpecGenPhase = "snapshot" | "draft" | "save" | null;
+
 type UseSpecGenerationArgs = {
   projectId: string;
   roomId: string;
@@ -145,12 +150,14 @@ function fail(
   message: string,
   setters: {
     setStage: (stage: SpecGenStage) => void;
+    setPhase: (phase: SpecGenPhase) => void;
     setStatusMessage: (message: string | null) => void;
     setRunId: (runId: string | null) => void;
     setPublicToken: (token: string | null) => void;
   },
 ): false {
   setters.setStage("error");
+  setters.setPhase(null);
   setters.setStatusMessage(message);
   setters.setRunId(null);
   setters.setPublicToken(null);
@@ -159,12 +166,14 @@ function fail(
 
 function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGenerationArgs): {
   stage: SpecGenStage;
+  phase: SpecGenPhase;
   statusMessage: string | null;
   isGenerating: boolean;
   start: () => Promise<boolean>;
 } {
   const room = useRoom();
   const [stage, setStage] = useState<SpecGenStage>("idle");
+  const [phase, setPhase] = useState<SpecGenPhase>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [publicToken, setPublicToken] = useState<string | null>(null);
@@ -240,6 +249,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     emittedRef.current = runId;
     console.error("Spec run subscription failed", realtimeError);
     setStage("error");
+    setPhase(null);
     setStatusMessage("Lost connection to the spec run. Try again.");
     setRunId(null);
     setPublicToken(null);
@@ -271,6 +281,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     if (realtimeStatus !== "COMPLETED") {
       emittedRef.current = runId;
       setStage("error");
+      setPhase(null);
       setStatusMessage(`Spec run ended (${realtimeStatus}). Try again.`);
       setRunId(null);
       setPublicToken(null);
@@ -280,6 +291,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     if ("error" in result) {
       emittedRef.current = runId;
       setStage("error");
+      setPhase(null);
       setStatusMessage(result.error);
       setRunId(null);
       setPublicToken(null);
@@ -287,6 +299,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
     }
     emittedRef.current = runId;
     setStage("saving");
+    setPhase("save");
     setStatusMessage("Saving spec…");
     fetch(`/api/projects/${projectId}/specs`, {
       method: "POST",
@@ -297,6 +310,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
         if (!response.ok) throw new Error(await readErrorMessage(response));
         await onSavedRef.current();
         setStage("idle");
+        setPhase(null);
         setStatusMessage(null);
         setRunId(null);
         setPublicToken(null);
@@ -304,6 +318,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
       .catch((error: unknown) => {
         console.error("Failed to save generated spec", error);
         setStage("error");
+        setPhase(null);
         setStatusMessage(
           error instanceof Error ? error.message : "Could not save the generated spec.",
         );
@@ -314,8 +329,9 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
 
   const start = useCallback(async (): Promise<boolean> => {
     if (stage === "working" || stage === "saving") return false;
-    const setters = { setStage, setStatusMessage, setRunId, setPublicToken };
+    const setters = { setStage, setPhase, setStatusMessage, setRunId, setPublicToken };
     setStage("working");
+    setPhase("snapshot");
     setStatusMessage("Preparing canvas snapshot…");
     emittedRef.current = null;
     // Arm the watchdog from dispatch time so even a stream that never
@@ -334,6 +350,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
       emittedRef.current = "timeout";
       console.error("Spec run timed out without a terminal status");
       setStage("error");
+      setPhase(null);
       setStatusMessage("Spec run timed out after 6 minutes. Try again.");
       setRunId(null);
       setPublicToken(null);
@@ -356,6 +373,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
       console.error("Failed to snapshot canvas for spec generation", error);
       return fail("Could not read the canvas. Try again.", setters);
     }
+    setPhase("draft");
     setStatusMessage("Generating spec…");
     try {
       const response = await fetch("/api/ai/spec", {
@@ -400,6 +418,7 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
 
   return {
     stage,
+    phase,
     statusMessage,
     isGenerating: stage === "working" || stage === "saving",
     start,
@@ -407,4 +426,4 @@ function useSpecGeneration({ projectId, roomId, messages, onSaved }: UseSpecGene
 }
 
 export { useSpecGeneration };
-export type { SpecGenStage };
+export type { SpecGenPhase, SpecGenStage };
