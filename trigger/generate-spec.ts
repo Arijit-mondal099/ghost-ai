@@ -102,6 +102,13 @@ Rules:
 - If the graph is empty, write the Overview from the conversation and note that no canvas components exist yet.
 - Keep the spec focused and implementation-ready; avoid marketing language.`;
 
+// Appended to the user prompt when the full draft overflows the output token
+// budget: same structure and coverage requirements, constrained hard enough
+// to fit ~1000 output tokens.
+const COMPACT_SUFFIX = `
+
+The previous draft exceeded the output length budget and was cut off. Rewrite the COMPLETE spec compactly so it fits: one tight paragraph per component, brief bullets for data flow, short rationale. Total under 700 words. Every node and edge must still be covered.`;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
 }
@@ -258,18 +265,24 @@ export const generateSpec = task({
     // the output is prose, not JSON (and Qwen on Groq rejects JSON mode
     // anyway — see `trigger/design-agent.ts`). Up to 3 attempts: empty
     // generations and transient 4xx/5xx are retried with backoff; rate-limit
-    // errors fail fast with a friendly message.
+    // errors fail fast with a friendly message. A `length` truncation is
+    // retried once in compact mode (below) before giving up.
     let markdown = "";
     try {
-      const messages = [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(chatHistory, nodes, edges) },
-      ] as { role: "system" | "user"; content: string }[];
+      const baseUserPrompt = buildUserPrompt(chatHistory, nodes, edges);
       let lastError = "unknown error";
+      let compactMode = false;
       for (let attempt = 1; attempt <= GROQ_MAX_ATTEMPTS; attempt += 1) {
         let finishReason = "unknown";
         let contentPreview = "";
         try {
+          const messages = [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: compactMode ? baseUserPrompt + COMPACT_SUFFIX : baseUserPrompt,
+            },
+          ] as { role: "system" | "user"; content: string }[];
           const completion = await groq.chat.completions.create({
             model: MODEL,
             temperature: 0.4,
@@ -286,9 +299,22 @@ export const generateSpec = task({
           contentPreview = content.length > 200 ? `${content.slice(0, 200)}…` : content;
           if (!content) throw new Error("model returned empty content");
           if (finishReason === "length") {
-            // Hit the output token ceiling: the draft is cut off mid-spec.
-            // Retrying the same prompt would truncate again, so fail fast —
-            // `friendlyGroqError` reports the cutoff distinctly below.
+            if (!compactMode) {
+              // Full draft overflowed the output budget — retry once with a
+              // brevity-constrained prompt instead of failing outright. Sleep
+              // out Groq's per-minute output-token window first so the retry
+              // itself isn't rate-limited.
+              compactMode = true;
+              logger.info("generate-spec retrying in compact mode", {
+                attempt,
+                finishReason,
+              });
+              metadata.set("progress", 0.5);
+              await sleep(60_000);
+              continue;
+            }
+            // Compact draft still cut off: the canvas genuinely exceeds what
+            // one run can emit — `friendlyGroqError` reports this distinctly.
             lastError = "finish_reason=length";
             break;
           }
