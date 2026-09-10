@@ -299,3 +299,125 @@ export function parseCanvasSaveBody(input: unknown): ParseResult<CanvasSaveBody>
   }
   return { ok: true, value: { nodes, edges } };
 }
+
+// ---------------------------------------------------------------------------
+// Spec generation trigger + token bodies (spec 29). No `projectId` is accepted
+// anywhere here: project access is derived from `roomId` (`roomId ===
+// Project.id` per spec 08), so a client-supplied project id would only be an
+// IDOR vector. `rejectUnknownFields` turns one into INVALID_BODY.
+// `chatHistory` entries mirror the AI_CHAT feed contract (specs 26/28):
+// user/assistant roles with content capped at AI_CHAT_CONTENT_MAX_LENGTH.
+// `nodes`/`edges` reuse the canvas-save envelope (id records + byte guard) so
+// canvas schema evolution never touches this parser.
+// ---------------------------------------------------------------------------
+
+export type SpecChatMessage = { role: "user" | "assistant"; content: string };
+export type SpecTriggerBody = {
+  roomId: string;
+  chatHistory: SpecChatMessage[];
+  nodes: unknown[];
+  edges: unknown[];
+};
+export type SpecTokenBody = { runId: string };
+
+const SPEC_CHAT_HISTORY_MAX_MESSAGES = 50;
+
+function isSpecChatMessage(value: unknown): value is SpecChatMessage {
+  if (!isPlainObject(value)) return false;
+  const { role, content } = value;
+  if (role !== "user" && role !== "assistant") return false;
+  if (typeof content !== "string") return false;
+  const trimmed = content.trim();
+  if (trimmed.length === 0 || trimmed.length > AI_CHAT_CONTENT_MAX_LENGTH) return false;
+  return true;
+}
+
+export function parseSpecTriggerBody(input: unknown): ParseResult<SpecTriggerBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["roomId", "chatHistory", "nodes", "edges"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const roomId = readNonEmptyString(input["roomId"]);
+  if (!roomId) {
+    return invalidBody("INVALID_BODY", "roomId is required");
+  }
+  const { chatHistory, nodes, edges } = input;
+  if (!Array.isArray(chatHistory)) {
+    return invalidBody("INVALID_BODY", "chatHistory must be an array");
+  }
+  if (chatHistory.length > SPEC_CHAT_HISTORY_MAX_MESSAGES) {
+    return invalidBody(
+      "INVALID_BODY",
+      `chatHistory must have at most ${SPEC_CHAT_HISTORY_MAX_MESSAGES} messages`,
+    );
+  }
+  if (!chatHistory.every(isSpecChatMessage)) {
+    return invalidBody(
+      "INVALID_BODY",
+      "every chatHistory entry must be { role: user|assistant, content }",
+    );
+  }
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+    return invalidBody("INVALID_BODY", "nodes and edges must be arrays");
+  }
+  if (!nodes.every(isIdRecord) || !edges.every(isIdRecord)) {
+    return invalidBody("INVALID_BODY", "every node and edge must be an object with a string id");
+  }
+  // Same wire-size reasoning as the canvas-save guard above: the graph +
+  // history ride the Trigger.dev trigger payload, so bound it here.
+  const byteLength = new TextEncoder().encode(JSON.stringify(input)).byteLength;
+  if (byteLength > CANVAS_MAX_BYTES) {
+    return invalidBody("SPEC_TOO_LARGE", "Spec payload exceeds the 5 MB limit");
+  }
+  return {
+    ok: true,
+    value: { roomId, chatHistory: chatHistory as SpecChatMessage[], nodes, edges },
+  };
+}
+
+export function parseSpecTokenBody(input: unknown): ParseResult<SpecTokenBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["runId"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const runId = readNonEmptyString(input["runId"]);
+  if (!runId) {
+    return invalidBody("INVALID_BODY", "runId is required");
+  }
+  return { ok: true, value: { runId } };
+}
+
+// ---------------------------------------------------------------------------
+// Spec save body (spec 30). The client POSTs the finished Markdown (fetched
+// from the completed generate-spec run output) so the API can persist it to
+// Vercel Blob + a ProjectSpec row. Single allow-listed field; the membership
+// gate lives in the route. Size guard is generous headroom over Groq's
+// 4000-token output cap (~16 KB) without inviting abuse.
+// ---------------------------------------------------------------------------
+
+export type SpecSaveBody = { markdown: string };
+
+const SPEC_SAVE_MAX_BYTES = 500 * 1024;
+
+export function parseSpecSaveBody(input: unknown): ParseResult<SpecSaveBody> {
+  if (!isPlainObject(input)) {
+    return invalidBody("INVALID_BODY", "Body must be a JSON object");
+  }
+  const unknown = rejectUnknownFields(input, ["markdown"]);
+  if (unknown) return invalidBody(unknown.code, unknown.message);
+
+  const markdown = readNonEmptyString(input["markdown"]);
+  if (!markdown) {
+    return invalidBody("INVALID_BODY", "markdown is required");
+  }
+  // UTF-8 bytes, not UTF-16 code units (same reasoning as the canvas guard).
+  const byteLength = new TextEncoder().encode(markdown).byteLength;
+  if (byteLength > SPEC_SAVE_MAX_BYTES) {
+    return invalidBody("SPEC_TOO_LARGE", "Spec exceeds the 500 KB limit");
+  }
+  return { ok: true, value: { markdown } };
+}
