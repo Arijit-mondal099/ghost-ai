@@ -44,9 +44,13 @@ async function resolveDownloadAccess(
   const trimmedSpecId = specId.trim();
 
   const me = await currentUser();
-  // Match against every address on the Clerk user, not just the primary
-  // (same pattern as the canvas PUT route).
+  // Match against every verified address on the Clerk user, not just the
+  // primary — an invite addressed to a secondary email must still resolve.
+  // Unverified addresses never authorize: otherwise anyone could claim an
+  // invited address without proving ownership of it (same predicate as the
+  // spec trigger + token routes).
   const userEmails = (me?.emailAddresses ?? [])
+    .filter((ea) => ea.verification?.status === "verified")
     .map((ea) => ea.emailAddress.toLowerCase())
     .filter((address) => address.length > 0);
 

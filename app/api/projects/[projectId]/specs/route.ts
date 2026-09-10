@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { currentUser } from "@clerk/nextjs/server";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
@@ -51,10 +51,14 @@ async function resolveSpecAccess(
   const trimmedId = projectId.trim();
 
   const me = await currentUser();
-  // Match against every address on the Clerk user, not just the primary —
-  // an invite addressed to a secondary email must still resolve (same
-  // pattern as the canvas PUT route).
+  // Match against every verified address on the Clerk user, not just the
+  // primary — an invite addressed to a secondary email must still resolve
+  // (same pattern as the canvas PUT route). Unverified addresses never
+  // authorize: otherwise anyone could claim an invited address without
+  // proving ownership of it (same predicate as the spec trigger + token
+  // routes).
   const userEmails = (me?.emailAddresses ?? [])
+    .filter((ea) => ea.verification?.status === "verified")
     .map((ea) => ea.emailAddress.toLowerCase())
     .filter((address) => address.length > 0);
 
@@ -116,6 +120,10 @@ export async function POST(
     select: { id: true },
   });
 
+  // Tracks a completed upload so compensation below can remove the Blob
+  // when the metadata update fails after a successful put — otherwise the
+  // private object lingers with no row referencing it.
+  let uploadedUrl: string | null = null;
   try {
     const blob = await put(`specs/${access.projectId}/${spec.id}.md`, parsed.value.markdown, {
       access: "private",
@@ -123,6 +131,7 @@ export async function POST(
       addRandomSuffix: false,
       allowOverwrite: true,
     });
+    uploadedUrl = blob.url;
     const saved = await prisma.projectSpec.update({
       where: { id: spec.id },
       data: { filePath: blob.url },
@@ -136,6 +145,13 @@ export async function POST(
       },
     );
   } catch {
+    if (uploadedUrl) {
+      try {
+        await del(uploadedUrl);
+      } catch (delError) {
+        console.error("Spec blob compensation delete failed", delError);
+      }
+    }
     await prisma.projectSpec.deleteMany({ where: { id: spec.id } });
     return blobUnavailable();
   }
@@ -153,7 +169,10 @@ export async function GET(
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true },
   });
-  return json({
-    specs: specs.map((spec) => ({ id: spec.id, createdAt: spec.createdAt.toISOString() })),
-  });
+  return json(
+    {
+      specs: specs.map((spec) => ({ id: spec.id, createdAt: spec.createdAt.toISOString() })),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
