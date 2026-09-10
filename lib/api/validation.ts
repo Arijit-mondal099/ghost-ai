@@ -322,13 +322,21 @@ export type SpecTokenBody = { runId: string };
 
 const SPEC_CHAT_HISTORY_MAX_MESSAGES = 50;
 
+// Mirror of GRAPH_NODE_LIMIT / GRAPH_EDGE_LIMIT in
+// `trigger/generate-spec.ts` (duplicated — the Trigger.dev bundle cannot use
+// the `@/` alias). Graphs beyond these bounds are rejected below so the task
+// never silently truncates accepted elements out of the prompt (its "cover
+// every node and edge" contract).
+export const SPEC_GRAPH_MAX_NODES = 200;
+export const SPEC_GRAPH_MAX_EDGES = 400;
+
 function isSpecChatMessage(value: unknown): value is SpecChatMessage {
   if (!isPlainObject(value)) return false;
   const { role, content } = value;
   if (role !== "user" && role !== "assistant") return false;
   if (typeof content !== "string") return false;
   const trimmed = content.trim();
-  if (trimmed.length === 0 || trimmed.length > AI_CHAT_CONTENT_MAX_LENGTH) return false;
+  if (trimmed.length === 0 || content.length > AI_CHAT_CONTENT_MAX_LENGTH) return false;
   return true;
 }
 
@@ -364,6 +372,12 @@ export function parseSpecTriggerBody(input: unknown): ParseResult<SpecTriggerBod
   }
   if (!nodes.every(isIdRecord) || !edges.every(isIdRecord)) {
     return invalidBody("INVALID_BODY", "every node and edge must be an object with a string id");
+  }
+  if (nodes.length > SPEC_GRAPH_MAX_NODES || edges.length > SPEC_GRAPH_MAX_EDGES) {
+    return invalidBody(
+      "SPEC_TOO_LARGE",
+      `nodes must have at most ${SPEC_GRAPH_MAX_NODES} entries and edges at most ${SPEC_GRAPH_MAX_EDGES}`,
+    );
   }
   // Same wire-size reasoning as the canvas-save guard above: the graph +
   // history ride the Trigger.dev trigger payload, so bound it here.
