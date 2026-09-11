@@ -3,7 +3,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
+} from "@/components/accordion";
 
 // ---------------------------------------------------------------------------
 // FAQ. Answers restate the enforced rules (owned-only caps, read-only
@@ -35,12 +35,12 @@ const FAQS = [
   {
     question: "How do I pay, upgrade, or cancel?",
     answer:
-      "Directly in the plan table on this page. Checkout, plan changes, and cancellation all run through Clerk's billing surface — there is no separate billing portal to learn. Cancel anytime; your projects stay, and creation pauses only if you sit over the Free limit.",
+      "Directly in the plan table on this page. Checkout, plan changes, and cancellation all run through Clerk's billing surface — there is no separate billing portal to learn. Cancel anytime; your projects stay, and nothing is deleted. If you sit over the Free limit after cancelling, existing projects become read-only — creating and editing stay blocked — until you delete projects back under the limit and write access returns.",
   },
   {
     question: "Are AI generation and specs limited?",
     answer:
-      "Both are included on every plan. Higher tiers raise generation limits for the AI architect and spec generation, so heavy users feel the difference on Pro and Pro Max. Exact numeric caps for those capabilities are still being tuned.",
+      "Both are included on every plan with no per-plan difference today. If tiered generation limits arrive later, they will be enforced in the product and stated here.",
   },
   {
     question: "Can I switch plans later?",
