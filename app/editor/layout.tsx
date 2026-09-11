@@ -17,9 +17,15 @@ import { getBillingSummaryForCurrentUser, getProjectsForCurrentUser } from "@/li
 // ---------------------------------------------------------------------------
 
 async function EditorLayout({ children }: { children: React.ReactNode }) {
+  // Fail-open billing: if the summary query rejects, the editor still renders
+  // with the project list — the navbar/sidebar fall back to the free upsell
+  // when `billing` is undefined.
   const [{ owned, shared }, billing] = await Promise.all([
     getProjectsForCurrentUser(),
-    getBillingSummaryForCurrentUser(),
+    getBillingSummaryForCurrentUser().catch((error) => {
+      console.warn("Billing summary unavailable, rendering without plan usage:", error);
+      return undefined;
+    }),
   ]);
   const projects = [...owned, ...shared];
 

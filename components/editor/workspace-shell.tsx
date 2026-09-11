@@ -107,6 +107,7 @@ function WorkspaceShellInner({
         onToggle={() => setIsSidebarOpen((open) => !open)}
         center={current?.name}
         showUserButton={!inRoom}
+        billing={billing}
         rightActions={
           inRoom ? (
             <>

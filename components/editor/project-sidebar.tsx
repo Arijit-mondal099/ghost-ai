@@ -54,10 +54,11 @@ function SidebarBillingFooter({ billing }: { billing?: BillingSummary }) {
       </div>
     );
   }
-
   const planLabel = PLAN_LABELS[billing.plan] ?? billing.plan;
   const used = Math.min(billing.ownedCount, billing.limit);
   const percent = billing.limit > 0 ? Math.min(100, Math.round((used / billing.limit) * 100)) : 0;
+  // Paying subscribers see their plan name — no upgrade button for them.
+  const isPaid = billing.plan === "pro" || billing.plan === "pro_max";
 
   return (
     <div className="border-t border-surface-border p-4">
@@ -65,12 +66,22 @@ function SidebarBillingFooter({ billing }: { billing?: BillingSummary }) {
         <span className="truncate text-xs font-medium text-copy-secondary">
           {planLabel} &bull; {billing.ownedCount}/{billing.limit} projects
         </span>
-        <Button variant="ghost" size="sm" asChild aria-label="Upgrade plan">
-          <Link href="/pricing">
-            <CrownIcon />
-            Upgrade
-          </Link>
-        </Button>
+        {isPaid ? (
+          <span
+            aria-label={`Current plan: ${planLabel}`}
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-copy-primary"
+          >
+            <CrownIcon className="h-4 w-4 text-brand" />
+            {planLabel}
+          </span>
+        ) : (
+          <Button variant="ghost" size="sm" asChild aria-label="Upgrade plan">
+            <Link href="/pricing">
+              <CrownIcon />
+              Upgrade
+            </Link>
+          </Button>
+        )}
       </div>
       <div
         role="progressbar"
