@@ -7,6 +7,8 @@
 // the spec requires both be distinguishable.
 // ---------------------------------------------------------------------------
 
+import { auth } from "@clerk/nextjs/server";
+
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
 import {
@@ -16,9 +18,11 @@ import {
   json,
   noContent,
   notFound,
+  planLimitExceeded,
   unauthorized,
 } from "@/lib/api/responses";
 import { parseRenameProjectBody } from "@/lib/api/validation";
+import { getPlan, getProjectLimit, planLimitExceededBody } from "@/lib/billing";
 import {
   bumpAccessVersion,
   cacheDel,
@@ -99,6 +103,17 @@ export async function PATCH(
 
   const ownership = await checkOwnership(userId, projectId);
   if (ownership.kind !== "ok") return ownershipResponse(ownership);
+
+  // Downgrade grandfathering (spec 36): while the owner's owned-project count
+  // exceeds their current plan limit, existing projects stay visible but
+  // read-only — block ALL owned-project mutations. Viewing and DELETE stay
+  // allowed so the user can get back under the limit; then writes resume.
+  const { has } = await auth();
+  const plan = getPlan((options) => has(options));
+  const ownedCount = await prisma.project.count({ where: { ownerId: userId } });
+  if (ownedCount > getProjectLimit(plan)) {
+    return planLimitExceeded({ ...planLimitExceededBody(plan) });
+  }
 
   let body: unknown;
   try {

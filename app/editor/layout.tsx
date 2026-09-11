@@ -1,5 +1,5 @@
 import { WorkspaceShell } from "@/components/editor/workspace-shell";
-import { getProjectsForCurrentUser } from "@/lib/projects-data";
+import { getBillingSummaryForCurrentUser, getProjectsForCurrentUser } from "@/lib/projects-data";
 
 // ---------------------------------------------------------------------------
 // Editor layout. Server component: fetches the user's projects once via
@@ -17,10 +17,23 @@ import { getProjectsForCurrentUser } from "@/lib/projects-data";
 // ---------------------------------------------------------------------------
 
 async function EditorLayout({ children }: { children: React.ReactNode }) {
-  const { owned, shared } = await getProjectsForCurrentUser();
+  // Fail-open billing: if the summary query rejects, the editor still renders
+  // with the project list — the navbar/sidebar fall back to the free upsell
+  // when `billing` is undefined.
+  const [{ owned, shared }, billing] = await Promise.all([
+    getProjectsForCurrentUser(),
+    getBillingSummaryForCurrentUser().catch((error) => {
+      console.warn("Billing summary unavailable, rendering without plan usage:", error);
+      return undefined;
+    }),
+  ]);
   const projects = [...owned, ...shared];
 
-  return <WorkspaceShell projects={projects}>{children}</WorkspaceShell>;
+  return (
+    <WorkspaceShell projects={projects} billing={billing}>
+      {children}
+    </WorkspaceShell>
+  );
 }
 
 export default EditorLayout;

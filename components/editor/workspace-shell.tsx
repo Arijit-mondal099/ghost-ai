@@ -13,10 +13,12 @@ import {
   ProjectSidebar,
   RenameProjectDialog,
   ShareProjectDialog,
+  UpgradePlanDialog,
 } from "@/components/editor";
 import { WorkspaceUIProvider, useWorkspaceUI } from "@/components/editor/workspace-ui-context";
 import { Button } from "@/components/ui/button";
 import { useShareDialog } from "@/hooks/use-share-dialog";
+import type { BillingSummary } from "@/lib/billing";
 import type { Project } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
@@ -51,10 +53,17 @@ import { cn } from "@/lib/utils";
 
 type WorkspaceShellProps = {
   projects: Project[];
+  billing?: BillingSummary;
   children: ReactNode;
 };
 
-function WorkspaceShellInner({ children }: { children: ReactNode }) {
+function WorkspaceShellInner({
+  billing,
+  children,
+}: {
+  billing?: BillingSummary;
+  children: ReactNode;
+}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const ui = useWorkspaceUI();
   const { dialogs } = ui;
@@ -98,6 +107,7 @@ function WorkspaceShellInner({ children }: { children: ReactNode }) {
         onToggle={() => setIsSidebarOpen((open) => !open)}
         center={current?.name}
         showUserButton={!inRoom}
+        billing={billing}
         rightActions={
           inRoom ? (
             <>
@@ -135,6 +145,7 @@ function WorkspaceShellInner({ children }: { children: ReactNode }) {
         ownedProjects={dialogs.ownedProjects}
         sharedProjects={dialogs.sharedProjects}
         currentRoomId={roomId}
+        billing={billing}
         onClose={() => setIsSidebarOpen(false)}
         onCreate={dialogs.openCreate}
         onRename={dialogs.openRename}
@@ -172,6 +183,13 @@ function WorkspaceShellInner({ children }: { children: ReactNode }) {
         onFormNameChange={dialogs.setFormName}
         onSubmit={() => void dialogs.submitRename()}
       />
+      <UpgradePlanDialog
+        open={dialogs.isUpgradeOpen}
+        upgrade={dialogs.upgrade}
+        onOpenChange={(open) => {
+          if (!open) dialogs.closeUpgrade();
+        }}
+      />
       <DeleteProjectDialog
         project={dialogs.deleteTarget}
         open={dialogs.isDeleteOpen}
@@ -205,10 +223,10 @@ function WorkspaceShellInner({ children }: { children: ReactNode }) {
   );
 }
 
-function WorkspaceShell({ projects, children }: WorkspaceShellProps) {
+function WorkspaceShell({ projects, billing, children }: WorkspaceShellProps) {
   return (
     <WorkspaceUIProvider projects={projects}>
-      <WorkspaceShellInner>{children}</WorkspaceShellInner>
+      <WorkspaceShellInner billing={billing}>{children}</WorkspaceShellInner>
     </WorkspaceUIProvider>
   );
 }

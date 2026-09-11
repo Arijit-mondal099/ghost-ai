@@ -1,11 +1,13 @@
 "use client";
 
-import { PlusIcon, XIcon } from "lucide-react";
+import Link from "next/link";
+import { CrownIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { ProjectItem } from "@/components/editor/project-item";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PLAN_LABELS, type BillingSummary } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/projects";
 
@@ -23,11 +25,77 @@ type ProjectSidebarProps = {
   sharedProjects: Project[];
   currentRoomId?: string;
   inline?: boolean;
+  /** Plan badge + usage. Presentational — resolved server-side in the layout. */
+  billing?: BillingSummary;
   onClose: () => void;
   onCreate: () => void;
   onRename: (project: Project) => void;
   onDelete: (project: Project) => void;
 };
+
+// ---------------------------------------------------------------------------
+// Plan badge + usage footer (spec 36). Purely presentational: counts and the
+// plan arrive as props from the server layout. A missing `billing` prop
+// (loading or error upstream) renders a muted fallback that links to
+// `/pricing` — the project list above never breaks.
+// ---------------------------------------------------------------------------
+
+function SidebarBillingFooter({ billing }: { billing?: BillingSummary }) {
+  if (!billing) {
+    return (
+      <div className="border-t border-surface-border p-4">
+        <div aria-hidden="true" className="mb-2 h-2 animate-pulse rounded-xl bg-subtle" />
+        <Button variant="ghost" size="sm" className="w-full" asChild>
+          <Link href="/pricing">
+            <CrownIcon />
+            Upgrade
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+  const planLabel = PLAN_LABELS[billing.plan] ?? billing.plan;
+  const used = Math.min(billing.ownedCount, billing.limit);
+  const percent = billing.limit > 0 ? Math.min(100, Math.round((used / billing.limit) * 100)) : 0;
+  // Paying subscribers see their plan name — no upgrade button for them.
+  const isPaid = billing.plan === "pro" || billing.plan === "pro_max";
+
+  return (
+    <div className="border-t border-surface-border p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="truncate text-xs font-medium text-copy-secondary">
+          {planLabel} &bull; {billing.ownedCount}/{billing.limit} projects
+        </span>
+        {isPaid ? (
+          <span
+            aria-label={`Current plan: ${planLabel}`}
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-copy-primary"
+          >
+            <CrownIcon className="h-4 w-4 text-brand" />
+            {planLabel}
+          </span>
+        ) : (
+          <Button variant="ghost" size="sm" asChild aria-label="Upgrade plan">
+            <Link href="/pricing">
+              <CrownIcon />
+              Upgrade
+            </Link>
+          </Button>
+        )}
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={used}
+        aria-valuemin={0}
+        aria-valuemax={billing.limit}
+        aria-label={`${billing.ownedCount} of ${billing.limit} projects used`}
+        className="h-1.5 overflow-hidden rounded-xl bg-subtle"
+      >
+        <div className="h-full rounded-xl bg-brand" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
 
 function ProjectSidebar({
   isOpen,
@@ -35,6 +103,7 @@ function ProjectSidebar({
   sharedProjects,
   currentRoomId,
   inline = false,
+  billing,
   onClose,
   onCreate,
   onRename,
@@ -112,7 +181,8 @@ function ProjectSidebar({
             </TabsContent>
           </Tabs>
 
-          <div className="border-t border-surface-border p-4">
+          <SidebarBillingFooter billing={billing} />
+          <div className="p-4">
             <Button variant="default" className="w-full" onClick={onCreate}>
               <PlusIcon />
               New Project
@@ -197,7 +267,8 @@ function ProjectSidebar({
           </TabsContent>
         </Tabs>
 
-        <div className="border-t border-surface-border p-4">
+        <SidebarBillingFooter billing={billing} />
+        <div className="p-4">
           <Button variant="default" className="w-full" onClick={onCreate}>
             <PlusIcon />
             New Project

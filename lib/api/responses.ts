@@ -18,7 +18,7 @@ export class HttpError extends Error {
   }
 }
 
-type ErrorBody = { error: { code: string; message: string } };
+type ErrorBody = { error: { code: string; message: string } & Record<string, unknown> };
 
 export function json<T>(data: T, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -30,16 +30,32 @@ export function json<T>(data: T, init: ResponseInit = {}): Response {
   });
 }
 
-function errorBody(status: number, code: string, message: string): Response {
-  const body: ErrorBody = { error: { code, message } };
+function errorBody(
+  status: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+): Response {
+  const body: ErrorBody = { error: { code, message, ...details } };
   return json(body, { status });
 }
 
 export const unauthorized = (message = "Authentication required") =>
   errorBody(401, "UNAUTHENTICATED", message);
 
-export const forbidden = (message = "You do not own this resource") =>
-  errorBody(403, "FORBIDDEN", message);
+export const forbidden = (
+  message = "You do not own this resource",
+  details?: Record<string, unknown>,
+) => errorBody(403, "FORBIDDEN", message, details);
+
+/** 403 for plan-limit rejections — details stay flat inside `error`. */
+export const planLimitExceeded = (details: Record<string, unknown>) =>
+  errorBody(
+    403,
+    "PLAN_LIMIT_EXCEEDED",
+    typeof details.message === "string" ? details.message : "Project limit exceeded for your plan",
+    details,
+  );
 
 export const notFound = (message = "Resource not found") => errorBody(404, "NOT_FOUND", message);
 

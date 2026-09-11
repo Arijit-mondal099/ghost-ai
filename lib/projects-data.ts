@@ -17,12 +17,28 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
 import { slugify, type Project } from "@/lib/projects";
+import { DEFAULT_PLAN, getPlan, getProjectLimit, type BillingSummary } from "@/lib/billing";
 import { cacheGet, cacheSet, projectsCacheKey, PROJECTS_TTL_SECONDS } from "@/lib/redis";
 
 export type ProjectsForUser = {
   owned: Project[];
   shared: Project[];
 };
+
+/**
+ * Billing summary for the sidebar (spec 36). Clerk is the source of truth
+ * for the plan (`free` default when signed out); the count covers owned
+ * projects only. Total function — never throws for missing auth.
+ */
+export async function getBillingSummaryForCurrentUser(): Promise<BillingSummary> {
+  const { userId, has } = await auth();
+  if (!userId) {
+    return { plan: DEFAULT_PLAN, ownedCount: 0, limit: getProjectLimit(DEFAULT_PLAN) };
+  }
+  const plan = getPlan((options) => has(options));
+  const ownedCount = await prisma.project.count({ where: { ownerId: userId } });
+  return { plan, ownedCount, limit: getProjectLimit(plan) };
+}
 
 export async function getProjectsForCurrentUser(): Promise<ProjectsForUser> {
   const { userId } = await auth();
