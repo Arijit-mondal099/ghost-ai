@@ -13,7 +13,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/api/auth";
 import { badRequest, HttpError, json, planLimitExceeded, unauthorized } from "@/lib/api/responses";
 import { parseCreateProjectBody } from "@/lib/api/validation";
-import { canCreateProject, getPlan, planLimitExceededBody } from "@/lib/billing";
+import { getPlan } from "@/lib/billing";
+import { tryCreateProject } from "@/lib/projects-write";
 import { cacheDel, projectsCacheKey } from "@/lib/redis";
 
 const PROJECT_SELECT = {
@@ -68,17 +69,20 @@ export async function POST(request: Request): Promise<Response> {
   // Plan enforcement (spec 36): Clerk is the source of truth for the plan;
   // the cap counts owned projects only. Shared/collaborator projects never
   // count. This route is the enforcement boundary — UI bypass must not work.
+  // Allocation is atomic per owner inside `tryCreateProject` (transaction +
+  // advisory lock), so concurrent POSTs cannot jointly overshoot the cap.
   const { has } = await clerkAuth();
   const plan = getPlan((options) => has(options));
-  const ownedCount = await prisma.project.count({ where: { ownerId: auth.userId } });
-  if (!canCreateProject(ownedCount, plan)) {
-    return planLimitExceeded({ ...planLimitExceededBody(plan) });
-  }
 
-  const project = await prisma.project.create({
-    data: { ownerId: auth.userId, name: parsed.value.name },
-    select: PROJECT_SELECT,
+  const result = await tryCreateProject({
+    ownerId: auth.userId,
+    plan,
+    name: parsed.value.name,
   });
+  if (result.kind === "limited") {
+    return planLimitExceeded({ ...result.details });
+  }
+  const project = result.project;
 
   // Invalidate (spec 33): the owner's project list changed. Fail-open.
   await cacheDel(projectsCacheKey(auth.userId));
