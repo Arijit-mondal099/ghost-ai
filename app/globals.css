@@ -274,3 +274,59 @@
     opacity: 0.7;
   }
 }
+
+/*
+  Testimonial marquee (landing). The track holds two copies of the row and
+  slides -50% on a loop; the reverse variant runs the same keyframes
+  backwards for the opposing row. Paused on hover via utility class.
+*/
+@keyframes ghost-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ghost-marquee {
+  animation: ghost-marquee 45s linear infinite;
+}
+
+.ghost-marquee-reverse {
+  animation-direction: reverse;
+}
+
+/* Pause the row only while a card itself is hovered (gaps keep scrolling). */
+.ghost-marquee:has(figure:hover) {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost-marquee {
+    animation: none;
+  }
+}
+
+/*
+  How-it-works step progress (landing). Fills the active card's bottom rail
+  over one rotation interval, then the highlight moves on.
+*/
+@keyframes ghost-step-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.ghost-step-progress {
+  animation: ghost-step-progress 3s linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost-step-progress {
+    animation: none;
+  }
+}
