@@ -94,6 +94,23 @@ async function PricingPage() {
           <Suspense fallback={<PricingTableSkeleton />}>
             <PricingTable appearance={authAppearance} />
           </Suspense>
+          <p className="text-center text-xs text-copy-muted">
+            By subscribing you agree to our{" "}
+            <Link
+              href="/terms"
+              className="rounded text-ai-text outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/privacy"
+              className="rounded text-ai-text outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </section>
 
         <Separator />

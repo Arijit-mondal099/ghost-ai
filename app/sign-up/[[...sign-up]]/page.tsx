@@ -22,6 +22,23 @@ function SignUpPage() {
       }
     >
       <SignUp appearance={authAppearance} routing="path" path="/sign-up" signInUrl="/sign-in" />
+      <p className="mt-4 text-center text-xs leading-relaxed text-copy-muted">
+        By signing up you agree to our{" "}
+        <Link
+          href="/terms"
+          className="rounded text-ai-text outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          Terms
+        </Link>{" "}
+        and{" "}
+        <Link
+          href="/privacy"
+          className="rounded text-ai-text outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </AuthShell>
   );
 }
