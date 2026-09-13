@@ -2,7 +2,7 @@
 
 > Real-time collaborative system design workspace. Describe a system in plain English, let an AI agent map it onto a shared canvas, refine it with collaborators, and export a technical specification.
 
-[![GitHub stars](https://img.shields.io/github/stars/Arijit-mondal099/ghost-ai?style=social)](https://github.com/Arijit-mondal099/ghost-ai)
+[![GitHub stars](https://img.shields.io/github/stars/Arijit-mondal099/ghost-ai?logo=github)](https://github.com/Arijit-mondal099/ghost-ai)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./docs/contributing.md)
 [![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
 
