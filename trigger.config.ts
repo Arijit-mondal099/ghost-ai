@@ -1,10 +1,11 @@
 import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
-  // TODO: replace with your project ref from the Trigger.dev dashboard
-  // (e.g. "proj_abc123"). Pick or create the project after
-  // `npx trigger.dev@latest login`.
-  project: process.env.TRIGGER_PROJECT_REF!,
+  // Project ref from the Trigger.dev dashboard (public identifier, not a
+  // secret). Dev/prod are environments inside this one project, so the
+  // literal is correct for both `trigger:dev` and `trigger:deploy` — no
+  // env var needed at config load.
+  project: "proj_fdxdszhltdgtrgaykswl",
   runtime: "node",
   dirs: ["trigger"],
   maxDuration: 3600,
