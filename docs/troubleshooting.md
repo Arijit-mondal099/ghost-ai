@@ -29,6 +29,7 @@ Cause: union of base + Accelerate-extended client types. Fix: single `PrismaClie
 ## AI / Trigger
 
 - Run never starts: is `bun run trigger:dev` running locally? In prod, is the worker deployed (`trigger deploy`)?
+- Run stuck in `PENDING_VERSION` (design sidebar shows `Design run ended (PENDING_VERSION)`, spec shows the spec variant): Trigger Cloud has the run but no deployed worker provides that task version. Check the dashboard Runs page, then: (1) deploy the worker (`trigger deploy`, same `TRIGGER_PROJECT_REF` as the app), (2) set task env (`LIVEBLOCKS_SECRET_KEY`, `GROQ_API_KEY`, `TRIGGER_SECRET_KEY`) on the Trigger Cloud project — not just Vercel, (3) keep SDK/CLI pinned to `4.5.16`. Locally this state never appears because `trigger:dev` provides the worker.
 - Groq 429: fail-fast by design (no retry storm) — run surfaces `error` stage; retry manually. Check `GROQ_API_KEY` and quota.
 - Empty/invalid ops: validator rejects bad shapes/colors/coords (±4000 clamp) — see `warnings` in the run result.
 - `429` from API: Upstash `ai` budget hit — wait or raise limits; `rate-limit-overlay.tsx` shows the banner.

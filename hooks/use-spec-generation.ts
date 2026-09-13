@@ -57,12 +57,18 @@ type UseSpecGenerationArgs = {
   onSaved: () => void | Promise<void>;
 };
 
-// Realtime statuses that mean "still running" — same set as the design
-// hook. Everything else terminal is either COMPLETED (success) or a
-// failure variant handled as an error.
+// Realtime statuses that mean "still running" — queued + executing.
+// Everything else terminal is either COMPLETED (success) or a failure
+// variant handled as an error. Queued names per the SDK zod `RunStatus`
+// schema plus the `runStream.js` queued list; legacy
+// WAITING_FOR_DEPLOY/REATTEMPTING/FROZEN kept for compat.
 const REALTIME_ACTIVE_STATUSES: ReadonlySet<string> = new Set([
+  "PENDING_VERSION",
   "WAITING_FOR_DEPLOY",
+  "WAITING",
   "QUEUED",
+  "DEQUEUED",
+  "PENDING",
   "EXECUTING",
   "REATTEMPTING",
   "FROZEN",
