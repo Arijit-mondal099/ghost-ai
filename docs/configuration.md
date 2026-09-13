@@ -22,7 +22,7 @@ All keys live in `.env` / `.env.local` (Next.js loads `.env.local` last, so it w
 
 - **Clerk**: public routes are `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/privacy(.*)`, `/terms(.*)` (see `proxy.ts`). Everything else calls `auth.protect()`.
 - **Liveblocks**: server creates rooms on demand (`getOrCreateRoom(roomId, { defaultAccesses: ["room:write"] })`). Auth endpoint identifies users with `{ name, avatar, color }`.
-- **Trigger.dev**: `trigger.config.ts` → `project: process.env.TRIGGER_PROJECT_REF`, `dirs: ["trigger"]`, `maxDuration: 3600`, 3× exponential retries (`factor 2`, `1s–10s`, `enabledInDev: false`). Run `bun run trigger:dev` locally.
+- **Trigger.dev**: `trigger.config.ts` → literal `project: "proj_fdxdszhltdgtrgaykswl"`, `dirs: ["trigger"]`, `maxDuration: 3600`, 3× exponential retries (`factor 2`, `1s–10s`, `enabledInDev: false`). Run `bun run trigger:dev` locally, `bun run trigger:deploy` from `main` for Production.
 - **Vercel Blob**: private store. Canvas at `canvas/{projectId}.json`, specs at `specs/{projectId}/{specId}.md`. API uses `put()`/`get()` server-side; clients never fetch Blob URLs directly.
 - **Upstash**: `ai` ratelimit budget gates all `/api/ai/*` + project writes; cache keys `projects`, `collabs`, `specs`, `access` with version bump on deletes.
 - **Prisma 7**: `prisma.config.ts` points at `DATABASE_URL`; client output `app/generated/prisma/` (gitignored). Direct-TCP via `@prisma/adapter-pg` — do **not** use `prisma+postgres://` HTTP strings with this client version (causes `P6000`).
