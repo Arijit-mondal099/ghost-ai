@@ -73,7 +73,7 @@ const DEFAULT_COLOR = "neutral";
 // this file never imports `@xyflow/react` (a client rendering dep).
 const DEFAULT_MARKER_END = { type: "arrowclosed", color: "var(--text-secondary)" };
 
-const MODEL = "qwen/qwen3.6-27b";
+const MODEL = "qwen/qwen3.8-27b";
 const GROQ_MAX_ATTEMPTS = 3;
 // Groq enforces output-tokens-per-minute (OTPM) per org tier. The call
 // leaves `max_tokens` unset by default, so Groq estimates the model's full
