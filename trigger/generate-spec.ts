@@ -46,7 +46,7 @@ const SHAPE_MEANINGS: Record<string, string> = {
   hexagon: "external system/boundary",
 };
 
-const MODEL = "qwen/qwen3.6-27b";
+const MODEL = "qwen/qwen3.8-27b";
 const GROQ_MAX_ATTEMPTS = 3;
 // Output token ceiling, resolved per run (see `resolveMaxTokens`).
 // Live-test finding (2026-09-10): the org's `on_demand` tier enforces
